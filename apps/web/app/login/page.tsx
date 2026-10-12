@@ -36,6 +36,7 @@ export default function LoginPage() {
             <select value={username} onChange={(e) => setUsername(e.target.value)}>
               <option value="analyst">analyst (all funds, 55 properties)</option>
               <option value="restricted">restricted (Synthetic Fund II only)</option>
+              <option value="guest">guest (demo viewer)</option>
             </select>
           </label>
           <label>

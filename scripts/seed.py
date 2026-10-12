@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "services" / "api"))
 from propertyiq.auth import hash_password  # noqa: E402
 from propertyiq.config import get_settings  # noqa: E402
-from propertyiq.seed.generator import GENERATOR_VERSION, generate  # noqa: E402
+from propertyiq.seed.generator import GENERATOR_VERSION, USER_PASSWORD_ENV, generate  # noqa: E402
 
 
 def main() -> None:
@@ -48,9 +48,14 @@ def main() -> None:
                 for row in ds.budgets:
                     copy.write_row(row)
             for username, display, role, portfolios in ds.users:
+                password = os.environ.get(USER_PASSWORD_ENV.get(username, "PIQ_DEMO_PASSWORD"), "")
+                if not password or password == "change-me":
+                    print(f"skipped user '{username}': set {USER_PASSWORD_ENV.get(username)} in .env "
+                          f"(scripts/set_demo_password.py --user {username})")
+                    continue
                 cur.execute(
                     "INSERT INTO demo_users (username, display_name, role, password_hash) VALUES (%s, %s, %s, %s)",
-                    (username, display, role, hash_password(demo_password)),
+                    (username, display, role, hash_password(password)),
                 )
                 cur.executemany(
                     "INSERT INTO user_portfolio_access (username, portfolio_id) VALUES (%s, %s)",

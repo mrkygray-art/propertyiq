@@ -33,7 +33,11 @@ PORTFOLIOS = [("FUND-I", "Synthetic Fund I"), ("FUND-II", "Synthetic Fund II")]
 DEMO_USERS = [
     ("analyst", "Demo Analyst (all funds)", "analyst", ["FUND-I", "FUND-II"]),
     ("restricted", "Demo Restricted Analyst (Fund II only)", "restricted_analyst", ["FUND-II"]),
+    # Guest sign-in for showing the demo to someone else; its own password (PIQ_GUEST_PASSWORD).
+    ("guest", "Guest (demo viewer)", "analyst", ["FUND-I", "FUND-II"]),
 ]
+# Which .env setting holds each user's password. Users not listed use PIQ_DEMO_PASSWORD.
+USER_PASSWORD_ENV = {"guest": "PIQ_GUEST_PASSWORD"}
 MARKETS = ["Metro North", "Metro South", "Lakeshore", "Inland Valley", "Coastal Plain"]
 
 PREFIXES = [
