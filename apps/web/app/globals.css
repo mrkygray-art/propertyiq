@@ -16,6 +16,8 @@
   --critical-bg: #fbeaea;
   --good: #0a7d0a;
   --good-bg: #e6f4e6;
+  --warning: #8a5a00;
+  --warning-bg: #fdf1d8;
   --muted-bg: #eeede9;
   --banner-bg: #1f2933;
   --banner-text: #f5f5f2;
@@ -44,6 +46,8 @@
     --critical-bg: #3a1f1f;
     --good: #4cc44c;
     --good-bg: #1d301d;
+  --warning: #f0b44c;
+  --warning-bg: #352a14;
     --muted-bg: #2a2a28;
     --banner-bg: #0b0b0b;
     --banner-text: #f0efec;
@@ -68,6 +72,8 @@
   --critical-bg: #3a1f1f;
   --good: #4cc44c;
   --good-bg: #1d301d;
+  --warning: #f0b44c;
+  --warning-bg: #352a14;
   --muted-bg: #2a2a28;
   --banner-bg: #0b0b0b;
   --banner-text: #f0efec;
@@ -123,6 +129,7 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
 .brand { font-weight: 700; font-size: 16px; color: var(--text); }
 .brand span { color: var(--accent); }
 .topbar .spacer { flex: 1; }
+.lockdown-banner { background: var(--good-bg); color: var(--good); font-size: 13px; font-weight: 600; padding: 6px 16px; text-align: center; border-bottom: 1px solid var(--border); }
 .status { display: flex; gap: 10px; font-size: 12px; color: var(--text-2); flex-wrap: wrap; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: 0; }
 .dot.ok { background: var(--good); }
@@ -174,6 +181,7 @@ tr.clickable { cursor: pointer; }
 .chip.rule { background: var(--critical-bg); color: var(--critical); }
 .chip.ok { background: var(--good-bg); color: var(--good); }
 .chip.neutral { background: var(--muted-bg); color: var(--text-2); }
+.chip.warn { background: var(--warning-bg); color: var(--warning); }
 .chips { display: flex; gap: 4px; flex-wrap: wrap; }
 .rank { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--critical-bg); color: var(--critical); font-weight: 700; font-size: 12px; }
 
@@ -254,3 +262,32 @@ details pre { white-space: pre-wrap; word-break: break-word; background: var(--s
 .login-card label { font-size: 12px; color: var(--text-2); display: flex; flex-direction: column; gap: 4px; }
 .hint { font-size: 12px; color: var(--text-3); margin-top: 12px; }
 .breadcrumb { font-size: 13px; color: var(--text-2); margin-bottom: 6px; }
+
+/* ---------- admin ---------- */
+.lockdown-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-top: 12px; }
+.lockdown-option { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.lockdown-option.current { border-color: var(--good); box-shadow: inset 0 0 0 1px var(--good); }
+.lockdown-option h3 { font-size: 14px; margin: 0; }
+.lockdown-option p { font-size: 13px; color: var(--text-2); margin: 0; flex: 1; }
+.lockdown-option p.lockdown-warning { color: var(--warning); background: var(--warning-bg); border-radius: 6px; padding: 6px 8px; flex: none; }
+.lockdown-option button { align-self: flex-start; }
+.table-wrap table.wide { min-width: 760px; }
+
+/* ---------- AI Engineering Lab ---------- */
+.lab-tabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--border); }
+.lab-tabs button { background: none; border: none; border-bottom: 2px solid transparent; padding: 8px 12px; font-size: 13px; color: var(--text-2); margin-bottom: -1px; }
+.lab-tabs button.active { color: var(--text); font-weight: 650; border-bottom-color: var(--accent); }
+.lab-flow { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+.lab-step { display: flex; gap: 10px; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; background: var(--surface); }
+.lab-step.model { border-color: var(--series-1); }
+.lab-step.check { border-color: var(--good); }
+.lab-step-n { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; background: var(--muted-bg); color: var(--text-2); }
+.lab-pre { white-space: pre-wrap; font-family: var(--mono); font-size: 12px; background: var(--surface-2); border-radius: 8px; padding: 10px; max-height: 320px; overflow: auto; }
+.lab-waterfall { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.lab-wf-head { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; flex-wrap: wrap; }
+.lab-wf-track { height: 8px; background: var(--surface-2); border-radius: 4px; margin: 4px 0; }
+.lab-wf-bar { height: 8px; border-radius: 4px; background: var(--good); }
+.lab-wf-bar.model { background: var(--series-1); }
+.lab-verdict { border-radius: 8px; padding: 10px 14px; font-weight: 600; }
+.lab-verdict.ok { background: var(--good-bg); color: var(--good); }
+.lab-verdict.bad { background: var(--critical-bg); color: var(--critical); }

@@ -68,10 +68,20 @@ export interface ChatAnswer {
   period: string; intent: string; answer: string; answer_source: "local_model" | "verified_template";
   model: string | null; verification: { status: "verified" | "rejected" | "not_applicable"; numbers_checked: number; unsupported_numbers: string[]; missing_properties: string[] };
   facts: Record<string, unknown>; citations: Citation[]; calculation_link: string;
-  focus_property_id: string | null; notes: string[]; latency_ms: number;
+  focus_property_id: string | null; notes: string[]; latency_ms: number; trace_id?: string | null;
 }
 
 export interface Health { status: "ok" | "degraded"; database: boolean; local_model: boolean }
+
+export type CheckStatus = "pass" | "warn" | "fail" | "info";
+export type LockdownMode = "off" | "app" | "computer";
+export interface CheckItem { area: string; key: string; title: string; status: CheckStatus; detail: string; fix: string | null }
+export interface FirewallStatus {
+  mode: LockdownMode | "unknown"; rule_count?: number; since?: string | null; wsl_outbound?: string | null;
+  firewall_products?: { name: string; enabled: boolean }[]; profiles?: { name: string; outbound: string }[];
+  api_can_reach_internet?: boolean;
+}
+export interface Checklist { checked_at: string; counts: Record<CheckStatus, number>; lockdown: FirewallStatus; items: CheckItem[] }
 
 const TOKEN_KEY = "piq_token";
 const USER_KEY = "piq_user";
@@ -93,7 +103,7 @@ export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = storage()?.getItem(TOKEN_KEY);
   const res = await fetch(path, {
     ...init,
@@ -141,4 +151,9 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ question, period, context_property_id: contextPropertyId }),
     }),
+  lockdownBanner: () => request<{ mode: LockdownMode; since: string | null }>("/api/lockdown/status"),
+  checklist: () => request<Checklist>("/api/admin/checklist"),
+  lockdown: () => request<FirewallStatus>("/api/admin/lockdown"),
+  setLockdown: (mode: LockdownMode) =>
+    request<{ requested: LockdownMode; message: string }>("/api/admin/lockdown", { method: "POST", body: JSON.stringify({ mode }) }),
 };

@@ -19,6 +19,7 @@ from pydantic import BaseModel
 from propertyiq import analytics, auth, chat, db
 from propertyiq.config import get_settings
 from propertyiq.finance import RuleSet, is_month_end, prioritize
+from propertyiq.lab import traces as lab_traces
 from propertyiq.llm import OllamaProvider
 from propertyiq.schemas import (
     AssetClassSummary, ChatRequest, ChatResponse, HealthResponse, LoginRequest, LoginResponse, MonthOut, PeriodsResponse,
@@ -249,7 +250,9 @@ def chat_endpoint(user: User, body: ChatRequest) -> ChatResponse:
     with db.connection() as conn:
         p = resolve_period(conn, body.period)
         result = chat.answer(conn, user, body.question, p, RULES, PROVIDER, body.context_property_id)
+    trace_id = lab_traces.record(user, body.question, result)
     return ChatResponse(
+        trace_id=trace_id,
         period=result.period, intent=result.intent, answer=result.answer, answer_source=result.answer_source,
         model=result.model, verification=result.verification, facts=result.facts, citations=result.citations,
         calculation_link=f"/verified?period={result.period.isoformat()}",
@@ -263,3 +266,15 @@ def chat_endpoint(user: User, body: ChatRequest) -> ChatResponse:
 from propertyiq.screening.routes import build_router as build_screening_router, enabled as screening_enabled  # noqa: E402
 if screening_enabled():
     app.include_router(build_screening_router(current_user))
+
+# Admin tools (security checklist, network lockdown). Admin role only, except the banner status.
+from propertyiq.admin.routes import build_router as build_admin_router  # noqa: E402
+app.include_router(build_admin_router(current_user))
+
+# Debt dashboard (synthetic loans, covenants, maturities). Fund-scoped like the portfolio.
+from propertyiq.lending.routes import build_router as build_debt_router  # noqa: E402
+app.include_router(build_debt_router(current_user))
+
+# AI Engineering Lab (request traces, model and tool registries, schema explorer, offline evidence).
+from propertyiq.lab.routes import build_router as build_lab_router  # noqa: E402
+app.include_router(build_lab_router(current_user, PROVIDER, RULES, resolve_period))

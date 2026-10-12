@@ -37,6 +37,7 @@ export default function LoginPage() {
               <option value="analyst">analyst (all funds, 55 properties)</option>
               <option value="restricted">restricted (Synthetic Fund II only)</option>
               <option value="guest">guest (demo viewer)</option>
+              <option value="admin">admin (security checklist, lockdown)</option>
             </select>
           </label>
           <label>

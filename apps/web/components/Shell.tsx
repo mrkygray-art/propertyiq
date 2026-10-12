@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { api, getUser, signOut, type Health, type User } from "@/lib/api";
+import { api, getUser, signOut, type Health, type LockdownMode, type User } from "@/lib/api";
 import ScreeningNavLink from "./ScreeningNavLink";
 
 function Indicator({ ok, label }: { ok: boolean | null; label: string }) {
@@ -19,8 +19,10 @@ function Indicator({ ok, label }: { ok: boolean | null; label: string }) {
 
 export default function Shell({ children }: { children: (user: User) => React.ReactNode }) {
   const router = useRouter();
+  const path = usePathname();
   const [user, setUser] = useState<User | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
+  const [lockdown, setLockdown] = useState<LockdownMode>("off");
 
   useEffect(() => {
     const u = getUser();
@@ -29,7 +31,10 @@ export default function Shell({ children }: { children: (user: User) => React.Re
       return;
     }
     setUser(u);
-    const check = () => api.health().then(setHealth).catch(() => setHealth({ status: "degraded", database: false, local_model: false }));
+    const check = () => {
+      api.health().then(setHealth).catch(() => setHealth({ status: "degraded", database: false, local_model: false }));
+      api.lockdownBanner().then((b) => setLockdown(b.mode)).catch(() => {});
+    };
     check();
     const t = setInterval(check, 30_000);
     return () => clearInterval(t);
@@ -41,17 +46,31 @@ export default function Shell({ children }: { children: (user: User) => React.Re
     <>
       <header className="topbar">
         <Link href="/" className="brand">Property<span>IQ</span></Link>
-        <ScreeningNavLink />
+        <nav style={{ display: "flex", gap: 14, fontSize: 13 }} aria-label="Modules">
+          {[{ href: "/", label: "Portfolio", on: path === "/" || path.startsWith("/properties") || path.startsWith("/verified") },
+            { href: "/debt", label: "Debt", on: path.startsWith("/debt") },
+            { href: "/lab", label: "AI Lab", on: path.startsWith("/lab") }].map((n) => (
+            <Link key={n.href} href={n.href} aria-current={n.on ? "page" : undefined}
+                  style={{ fontWeight: n.on ? 650 : 400, color: n.on ? "var(--text)" : undefined }}>{n.label}</Link>
+          ))}
+          <ScreeningNavLink />
+        </nav>
         <div className="status" aria-label="System status">
           <Indicator ok={health ? health.database : null} label="Database" />
           <Indicator ok={health ? health.local_model : null} label="Local model" />
         </div>
         <div className="spacer" />
         <div className="user">
+          {user.role === "admin" && <Link href="/admin">Admin</Link>}
           <span>{user.display_name}</span>
           <button className="linkbtn" onClick={() => { signOut(); router.replace("/login"); }}>Sign out</button>
         </div>
       </header>
+      {lockdown !== "off" && (
+        <div className="lockdown-banner" role="status">
+          Offline lockdown is on: {lockdown === "computer" ? "this whole computer is" : "PropertyIQ's programs are"} blocked from the internet.
+        </div>
+      )}
       <main>{children(user)}</main>
     </>
   );

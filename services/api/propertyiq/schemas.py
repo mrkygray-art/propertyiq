@@ -278,6 +278,7 @@ class ChatResponse(BaseModel):
     focus_property_id: str | None
     notes: list[str]
     latency_ms: int
+    trace_id: str | None = None  # AI Engineering Lab trace (stages and timings; no question text)
 
 
 class HealthResponse(BaseModel):

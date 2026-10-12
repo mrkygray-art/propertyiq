@@ -3,6 +3,7 @@ Nothing is echoed.
 
   .\\.venv\\Scripts\\python.exe scripts\\set_demo_password.py               # analyst + restricted (PIQ_DEMO_PASSWORD)
   .\\.venv\\Scripts\\python.exe scripts\\set_demo_password.py --user guest  # guest only (PIQ_GUEST_PASSWORD)
+  .\\.venv\\Scripts\\python.exe scripts\\set_demo_password.py --user admin  # test admin (PIQ_ADMIN_PASSWORD)
 """
 import argparse
 import getpass
@@ -41,7 +42,7 @@ def main() -> None:
         for username, display, role, portfolios in users:
             conn.execute(
                 "INSERT INTO demo_users (username, display_name, role, password_hash) VALUES (%s, %s, %s, %s) "
-                "ON CONFLICT (username) DO UPDATE SET password_hash = EXCLUDED.password_hash",
+                "ON CONFLICT (username) DO UPDATE SET password_hash = EXCLUDED.password_hash, role = EXCLUDED.role",
                 (username, display, role, hash_password(pw)))
             for p in portfolios:
                 conn.execute("INSERT INTO user_portfolio_access (username, portfolio_id) VALUES (%s, %s) "

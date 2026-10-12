@@ -68,6 +68,12 @@ cd apps\web; npx tsc --noEmit; npm run build
 
 # Against the running API
 .\.venv\Scripts\python.exe scripts\smoke_test.py
+
+# Back up the database and uploads, then test-restore the backup into a scratch database
+.\.venv\Scripts\python.exe scripts\backup.py
+
+# Admin sign-in (security checklist and internet lockdown at /admin)
+.\.venv\Scripts\python.exe scripts\set_demo_password.py --user admin
 ```
 
 ## UI
@@ -102,6 +108,13 @@ Demo sign-ins are `analyst` (all 55 properties) and `restricted` (Synthetic Fund
 | `GET /api/portfolio/summary?period=` | Counts, asset-class mix, occupancy, NOI actual vs budget |
 | `GET /api/properties/{id}?period=` | One property: assessment plus 36-month history |
 | `POST /api/chat` | Question → deterministic routing → verified facts → local model → number check. Returns answer, source label, facts, citations |
+| `GET /api/debt/summary?period=` | Synthetic loans in the user's funds: totals, maturity wall, DSCR trend, covenant results |
+| `GET /api/debt/loans/{id}?period=` | One loan: terms, covenants, quarterly history, collateral, calculation trail |
+| `GET /api/lab/overview`, `/traces`, `/traces/{id}`, `/models`, `/tools`, `/schema`, `/offline` | AI Engineering Lab (traces limited to your own; admins see all) |
+| `POST /api/lab/compare` | Same question with the local model off and on; the facts must match |
+| `GET /api/admin/checklist` | Admin only: live security checklist with evidence |
+| `GET` / `POST /api/admin/lockdown` | Admin only: firewall status / request a lockdown mode (`app`, `computer`, `off`); Windows asks for permission on this PC |
+| `GET /api/lockdown/status` | Any signed-in user: whether lockdown is on (for the banner) |
 
 ## Layout
 
@@ -125,3 +138,6 @@ docs/                       architecture, security boundary, financial definitio
 - [Demo script](docs/demo-script.md)
 - [Loan screening module](docs/loan-screening.md)
 - [Tier 2: document intake and underwriting](docs/document-intake.md)
+- [Admin: security checklist, lockdown and backups](docs/admin-lockdown.md)
+- [Debt dashboard](docs/debt-dashboard.md)
+- [AI Engineering Lab](docs/ai-lab.md)

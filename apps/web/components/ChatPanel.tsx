@@ -39,6 +39,7 @@ function Answer({ a }: { a: ChatAnswer }) {
         <SourceBadge a={a} />
         <span>Period {a.period}</span>
         <span>· {(a.latency_ms / 1000).toFixed(1)}s</span>
+        {a.trace_id && <Link href={`/lab?tab=traces&trace=${a.trace_id}`}>· How this answer was made</Link>}
       </div>
       {a.notes.length > 0 && <div className="msg-notes">{a.notes.join(" ")}</div>}
       {a.citations.length > 0 && (
