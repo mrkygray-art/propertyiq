@@ -25,7 +25,7 @@ from propertyiq.config import REPO_ROOT, get_settings
 PORTS = {8000: "PropertyIQ API", 3000: "PropertyIQ web app", 5432: "Postgres (Docker)", 11434: "Ollama (local model)"}
 HOSTED_AI_PACKAGES = {"openai", "anthropic", "google-generativeai", "google-genai", "cohere", "mistralai",
                       "langchain", "langchain-openai", "groq", "together", "replicate", "litellm"}
-SECRET_KEYS = ["POSTGRES_PASSWORD", "PIQ_OWNER_PASSWORD", "PIQ_READONLY_PASSWORD", "PIQ_SCREENING_PASSWORD",
+SECRET_KEYS = ["POSTGRES_PASSWORD", "PIQ_OWNER_PASSWORD", "PIQ_READONLY_PASSWORD", "PIQ_SCREENING_PASSWORD", "PIQ_TRACE_PASSWORD",
                "PIQ_SESSION_SECRET"]
 REMOTE_ACCESS = {"rcclient.exe": "AnyViewer", "anydesk.exe": "AnyDesk", "teamviewer.exe": "TeamViewer"}
 DOCKER = Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "DockerDesktop" / "resources" / "bin" / "docker.exe"
@@ -109,6 +109,15 @@ def check_database() -> list[dict]:
             out.append(item(A, "writer_scope", "The screening writer can change only loan screening tables",
                             "pass" if not stray else "fail",
                             "Writes limited to screening_* tables." if not stray else f"Also writable: {', '.join(stray)}."))
+
+        if one("SELECT count(*) AS n FROM pg_roles WHERE rolname = 'piq_trace_writer'")["n"]:
+            stray = [r["relname"] for r in conn.execute(
+                "SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+                "WHERE n.nspname = 'piq' AND c.relkind IN ('r','p') AND c.relname <> 'request_traces' "
+                "AND has_table_privilege('piq_trace_writer', c.oid, 'SELECT, INSERT, UPDATE, DELETE, TRUNCATE')")]
+            out.append(item(A, "trace_writer_scope", "The trace writer can touch only the AI request traces",
+                            "pass" if not stray else "fail",
+                            "Limited to request_traces." if not stray else f"Also reachable: {', '.join(stray)}."))
 
         pub = one("SELECT has_schema_privilege('public', 'public', 'CREATE') AS a, "
                   "has_schema_privilege('public', 'piq', 'CREATE') AS b")

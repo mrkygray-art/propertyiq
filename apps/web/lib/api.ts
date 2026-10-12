@@ -68,7 +68,7 @@ export interface ChatAnswer {
   period: string; intent: string; answer: string; answer_source: "local_model" | "verified_template";
   model: string | null; verification: { status: "verified" | "rejected" | "not_applicable"; numbers_checked: number; unsupported_numbers: string[]; missing_properties: string[] };
   facts: Record<string, unknown>; citations: Citation[]; calculation_link: string;
-  focus_property_id: string | null; notes: string[]; latency_ms: number;
+  focus_property_id: string | null; notes: string[]; latency_ms: number; trace_id?: string | null;
 }
 
 export interface Health { status: "ok" | "degraded"; database: boolean; local_model: boolean }

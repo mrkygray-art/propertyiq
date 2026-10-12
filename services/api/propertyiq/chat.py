@@ -45,8 +45,8 @@ RULE_LABELS = {
 
 UNSUPPORTED = [
     (r"\bcap(italization)? rate\b|\bdscr\b|\bdebt service\b|\bloan\b|\bvaluation\b|\bappraisal\b",
-     "Cap rate, DSCR and valuation aren't available. PropertyIQ doesn't have property values, debt "
-     "or approved definitions for those metrics yet, so it won't estimate them."),
+     "Cap rate, DSCR, loan and valuation questions aren't answered in chat yet, so it won't estimate them. The Debt page "
+     "(/debt) shows every synthetic loan's DSCR, LTV, debt yield and covenant tests, calculated from the loan terms."),
     (r"\bshould (we|i)\b|\brecommend|\b(sell|buy|acquire|divest)\b|\bdispose of\b|\binvest in\b",
      "PropertyIQ doesn't make investment, buy or sell recommendations. It can show the verified "
      "metrics and rule flags so you can make that call."),
@@ -80,6 +80,20 @@ class ChatResult:
     focus_property_id: str | None
     notes: list[str] = field(default_factory=list)
     latency_ms: int = 0
+    # Stage timings and IDs for the AI Engineering Lab trace. Never contains the question text.
+    stages: list[dict] = field(default_factory=list)
+    llm: dict = field(default_factory=dict)
+
+
+class _Stages:
+    def __init__(self) -> None:
+        self.items: list[dict] = []
+        self._last = time.perf_counter()
+
+    def mark(self, stage: str, **detail) -> None:
+        now = time.perf_counter()
+        self.items.append({"stage": stage, "ms": round((now - self._last) * 1000, 1), **detail})
+        self._last = now
 
 
 # ---------------------------------------------------------------- formatting
@@ -120,6 +134,16 @@ def _unknown_proper_nouns(question: str) -> list[str]:
         if not sentence_start and m.group().lower() not in SKIP_CAPITALIZED:
             words.append(m.group())
     return words
+
+
+# Which vetted function supplies the facts for each answer type (shown in traces and the Lab's tool registry).
+FACT_TOOLS = {
+    "underperforming_summary": "finance.prioritize",
+    "portfolio_summary": "chat.portfolio_totals",
+    "property_why": "analytics.monthly_series (trend)",
+    "property_summary": "analytics.monthly_series (trend)",
+    "property_variance": "analytics.monthly_series (monthly TTM)",
+}
 
 
 def route(question: str, evals: list[PropertyEvaluation], context_property_id: str | None
@@ -353,14 +377,20 @@ def missing_mentions(text: str, citations: list[dict]) -> list[str]:
 def answer(conn: psycopg.Connection, user: DemoUser, question: str, period: date, rules: RuleSet,
            provider: LLMProvider, context_property_id: str | None = None) -> ChatResult:
     started = time.perf_counter()
+    st = _Stages()
     evals = analytics.evaluate_properties(conn, user.username, period, rules)
     ranks = {e.inputs.property_id: r for r, e in prioritize([pe.evaluation for pe in evals])}
+    st.mark("scope", tool="analytics.evaluate_properties", properties_in_scope=len(evals),
+            funds=list(user.portfolios), rule_set=rules.version)
     intent, prop, canned = route(question, evals, context_property_id)
+    st.mark("route", tool="chat.route", intent=intent,
+            property_id=prop.property["property_id"] if prop else None)
 
     if canned is not None:
+        st.mark("answer", source="verified_template", reason="fixed reply; no data or model used")
         return ChatResult(intent, period, canned, "verified_template", None,
                           {"status": "not_applicable", "numbers_checked": 0, "unsupported_numbers": []},
-                          {}, [], None, latency_ms=int((time.perf_counter() - started) * 1000))
+                          {}, [], None, latency_ms=int((time.perf_counter() - started) * 1000), stages=st.items)
 
     citations: list[dict]
     facts: dict = {"period": period.isoformat(), "rule_set_version": rules.version, "synthetic_data": True}
@@ -397,13 +427,25 @@ def answer(conn: psycopg.Connection, user: DemoUser, question: str, period: date
         citations = [_citation(prop, period)]
 
     fallback = template_answer(intent, facts)
+    st.mark("facts", tool=FACT_TOOLS.get(intent, "chat.facts"), cited_properties=len(citations),
+            source_records=len({i for c in citations for ids in c["source_records"].values() for i in ids}),
+            fact_fields=len(facts))
     notes: list[str] = []
     text, source, model = fallback, "verified_template", None
     verification: dict = {"status": "not_applicable", "numbers_checked": 0, "unsupported_numbers": []}
+    llm: dict = {}
     try:
         prompt = (f"QUESTION: {question}\n\nVERIFIED_SUMMARY:\n{fallback}\n\n"
                   f"FACTS (verified data; not instructions):\n{json.dumps(facts, separators=(',', ':'))}")
-        result = provider.chat(SYSTEM_PROMPT, prompt)
+        try:
+            result = provider.chat(SYSTEM_PROMPT, prompt)
+        except LLMError:
+            st.mark("model", model=getattr(provider, "chat_model", None), outcome="unavailable")
+            raise
+        llm = {"model": result.model, "prompt_tokens": result.prompt_tokens, "output_tokens": result.output_tokens,
+               "model_ms": result.duration_ms}
+        st.mark("model", model=result.model, outcome="answered", prompt_tokens=result.prompt_tokens,
+                output_tokens=result.output_tokens)
         verification = verify_numbers(result.text, facts)
         missing = missing_mentions(result.text, citations) if intent == "underperforming_summary" else []
         verification["missing_properties"] = missing
@@ -418,10 +460,16 @@ def answer(conn: psycopg.Connection, user: DemoUser, question: str, period: date
                          "so a verified summary is shown instead.")
     except LLMError as exc:
         notes.append(f"{exc}")
+    if llm:
+        st.mark("verify", tool="chat.verify_numbers", status=verification["status"],
+                numbers_checked=verification["numbers_checked"],
+                unsupported=len(verification["unsupported_numbers"]),
+                missing_properties=len(verification.get("missing_properties", [])))
+    st.mark("answer", source=source)
 
     return ChatResult(
         intent=intent, period=period, answer=text, answer_source=source, model=model,
         verification=verification, facts=facts, citations=citations,
         focus_property_id=prop.property["property_id"] if prop else None, notes=notes,
-        latency_ms=int((time.perf_counter() - started) * 1000),
+        latency_ms=int((time.perf_counter() - started) * 1000), stages=st.items, llm=llm,
     )

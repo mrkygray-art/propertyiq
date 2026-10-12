@@ -48,7 +48,8 @@ export default function Shell({ children }: { children: (user: User) => React.Re
         <Link href="/" className="brand">Property<span>IQ</span></Link>
         <nav style={{ display: "flex", gap: 14, fontSize: 13 }} aria-label="Modules">
           {[{ href: "/", label: "Portfolio", on: path === "/" || path.startsWith("/properties") || path.startsWith("/verified") },
-            { href: "/debt", label: "Debt", on: path.startsWith("/debt") }].map((n) => (
+            { href: "/debt", label: "Debt", on: path.startsWith("/debt") },
+            { href: "/lab", label: "AI Lab", on: path.startsWith("/lab") }].map((n) => (
             <Link key={n.href} href={n.href} aria-current={n.on ? "page" : undefined}
                   style={{ fontWeight: n.on ? 650 : 400, color: n.on ? "var(--text)" : undefined }}>{n.label}</Link>
           ))}

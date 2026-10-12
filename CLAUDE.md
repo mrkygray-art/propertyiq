@@ -31,6 +31,12 @@ A local-only proof of concept on synthetic data, built for a potential enterpris
 - **Ratios aren't stored.** Balances, debt service and ratios are computed in `calc.py` from the loan terms. Every loan query joins `user_portfolio_access`.
 - **Reseeding:** `scripts/seed.py` reloads loans too (reloading properties cascades to them); `scripts/seed_loans.py` reloads only loans.
 
+## AI Engineering Lab
+
+- **Where it lives:** `services/api/propertyiq/lab/` and `apps/web/app/lab/`. Read `docs/ai-lab.md` first.
+- **Traces store no question, prompt or answer text** (owner decision). Add trace fields as IDs, counts or timings only, and extend the marker test in `tests/test_lab.py`.
+- **Writer login:** `piq_trace_writer` writes traces; setup is `scripts/lab_setup.py`.
+
 ## Admin tools
 
 - **Where it lives:** `services/api/propertyiq/admin/`, `apps/web/app/admin/`, `scripts/lockdown.ps1` and `scripts/backup.py`. Read `docs/admin-lockdown.md` first.
