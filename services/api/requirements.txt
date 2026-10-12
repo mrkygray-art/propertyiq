@@ -7,3 +7,10 @@ httpx==0.28.1
 pytest==9.1.1
 reportlab==5.0.1
 openpyxl==3.1.5
+# Tier 2 document intake
+pdfplumber==0.11.10
+pypdfium2==5.14.0
+rapidocr-onnxruntime==1.2.3
+xlrd==2.0.2
+python-multipart==0.0.32
+pillow==12.3.0

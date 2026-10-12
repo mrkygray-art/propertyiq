@@ -58,9 +58,16 @@ def main() -> None:
     subprocess.run([sys.executable, str(ROOT / "scripts" / "migrate.py")], check=True)
 
     with superuser() as conn:
-        conn.execute("GRANT SELECT, INSERT, UPDATE, DELETE ON piq.screening_guideline_sets TO piq_screening_writer")
-        conn.execute("GRANT USAGE ON SEQUENCE piq.screening_guideline_sets_set_id_seq TO piq_screening_writer")
-        print("piq_screening_writer can change screening_guideline_sets only")
+        # Every screening_ table (Tier 1 and Tier 2), and nothing else.
+        tables = [r[0] for r in conn.execute(
+            "SELECT tablename FROM pg_tables WHERE schemaname = 'piq' AND tablename LIKE 'screening\\_%'")]
+        for t in tables:
+            conn.execute(sql.SQL("GRANT SELECT, INSERT, UPDATE, DELETE ON piq.{} TO piq_screening_writer").format(
+                sql.Identifier(t)))
+        for (seq,) in conn.execute(
+                "SELECT sequencename FROM pg_sequences WHERE schemaname = 'piq' AND sequencename LIKE 'screening\\_%'"):
+            conn.execute(sql.SQL("GRANT USAGE ON SEQUENCE piq.{} TO piq_screening_writer").format(sql.Identifier(seq)))
+        print(f"piq_screening_writer can change the {len(tables)} screening_ tables only")
 
 
 if __name__ == "__main__":

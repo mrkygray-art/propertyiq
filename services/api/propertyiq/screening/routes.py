@@ -207,6 +207,15 @@ def build_router(user_dependency) -> APIRouter:
         report = build(body.deal.to_inputs(), g, scenarios) if scenarios else build(body.deal.to_inputs(), g)
         return report, set_id
 
+    # Tier 2: deals, document intake, flags. Same sign-in and on/off switch as Tier 1.
+    from propertyiq.screening.tier2_routes import build_tier2_router
+
+    def provider():
+        from propertyiq import main
+        return main.PROVIDER
+
+    router.include_router(build_tier2_router(provider, user_dependency))
+
     @router.get("/status")
     def status() -> dict:
         return {"enabled": True, "disclaimer": DISCLAIMER, "property_types": list(PROPERTY_TYPES)}

@@ -24,3 +24,6 @@ data/synthetic/generated/
 
 # Local run logs
 logs/
+
+# Uploaded documents (Tier 2): stay on this machine
+data/uploads/

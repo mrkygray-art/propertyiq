@@ -118,6 +118,7 @@ function Screening() {
             </select>
           </label>
           <Link href="/screening/guidelines">Edit guidelines</Link>
+          <Link href="/screening/deals">Deal workspace (upload documents)</Link>
         </div>
       </div>
 
