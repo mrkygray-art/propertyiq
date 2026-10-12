@@ -8,7 +8,7 @@ It is a proof of concept built to show how a private, auditable AI system for re
 
 ![PropertyIQ portfolio overview: 55 synthetic properties, 4 flagged, a $420,000 flagged NOI shortfall, and the Ask PropertyIQ chat panel](docs/images/propertyiq-portfolio-overview.webp)
 
-[Read the case study](https://ky-gray-portfolio.vercel.app/propertyiq) · [Architecture](docs/architecture.md) · [Security boundary](docs/security-boundary.md)
+[Read the case study](https://ky-gray-portfolio.vercel.app/propertyiq) · [Try the simulator demo](https://ky-gray-portfolio.vercel.app/propertyiq-demo) (in your browser, synthetic data, scripted chat) · [Architecture](docs/architecture.md) · [Security boundary](docs/security-boundary.md)
 
 ---
 
