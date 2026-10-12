@@ -1,0 +1,38 @@
+{
+  "_comment": "Fixed facts from the PropertyIQ brief for reporting period 2026-09-30. Fictional properties. TTM = trailing 12 months ending the period. noi_yoy_pct is a seeded fact; the generator back-solves prior-year NOI so the computed YoY reproduces it.",
+  "report_period": "2026-09-30",
+  "properties": [
+    {
+      "property_id": "PIQ-001", "name": "Westlake Office Center", "asset_class": "office",
+      "portfolio_id": "FUND-I", "market": "Metro North", "rentable_size": 250000,
+      "occupancy_pct": "72", "occupancy_start_pct": "90",
+      "noi_budget_ttm": "900000", "noi_actual_ttm": "720000", "noi_yoy_pct": "-18",
+      "prior_noi_yoy_pct": "-2", "prior_noi_to_budget": "0.98",
+      "expected_budget_shortfall": "180000"
+    },
+    {
+      "property_id": "PIQ-002", "name": "Riverside Retail Plaza", "asset_class": "retail",
+      "portfolio_id": "FUND-I", "market": "Lakeshore", "rentable_size": 200000,
+      "occupancy_pct": "79", "occupancy_start_pct": "88",
+      "noi_budget_ttm": "800000", "noi_actual_ttm": "680000", "noi_yoy_pct": "-12",
+      "prior_noi_yoy_pct": "-1", "prior_noi_to_budget": "0.99",
+      "expected_budget_shortfall": "120000"
+    },
+    {
+      "property_id": "PIQ-003", "name": "Harbor Industrial Park", "asset_class": "industrial",
+      "portfolio_id": "FUND-II", "market": "Coastal Plain", "rentable_size": 500000,
+      "occupancy_pct": "91", "occupancy_start_pct": "95",
+      "noi_budget_ttm": "600000", "noi_actual_ttm": "530000", "noi_yoy_pct": "-9",
+      "prior_noi_yoy_pct": "1", "prior_noi_to_budget": "0.99",
+      "expected_budget_shortfall": "70000"
+    },
+    {
+      "property_id": "PIQ-004", "name": "Sunset Multifamily", "asset_class": "multifamily",
+      "portfolio_id": "FUND-II", "market": "Inland Valley", "rentable_size": 200,
+      "occupancy_pct": "88", "occupancy_start_pct": "94",
+      "noi_budget_ttm": "400000", "noi_actual_ttm": "350000", "noi_yoy_pct": "-6",
+      "prior_noi_yoy_pct": "2", "prior_noi_to_budget": "1.00",
+      "expected_budget_shortfall": "50000"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "version": "2026-10-11.1",
+  "description": "Default underperformance rules. A property is flagged if any rule triggers.",
+  "occupancy_min_pct": "85",
+  "noi_yoy_max_pct": "-10",
+  "noi_to_budget_max_pct": "90"
+}

@@ -1,0 +1,7 @@
+[tool.pytest.ini_options]
+pythonpath = ["services/api"]
+testpaths = ["tests"]
+markers = [
+    "db: needs the seeded local Postgres (skipped if unreachable)",
+    "llm: needs local Ollama with the configured models (skipped if unreachable)",
+]

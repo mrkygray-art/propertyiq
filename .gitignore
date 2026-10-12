@@ -1,0 +1,26 @@
+# Secrets
+.env
+.env.*
+!.env.example
+# Holds only NEXT_TELEMETRY_DISABLED=1, no secrets
+!apps/web/.env
+next-env.d.ts
+*.tsbuildinfo
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Node / Next.js
+node_modules/
+.next/
+
+# Generated data and model weights
+data/synthetic/generated/
+*.gguf
+*.safetensors
+
+# Local run logs
+logs/
