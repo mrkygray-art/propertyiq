@@ -7,14 +7,15 @@ import Help from "@/components/Help";
 import Shell from "@/components/Shell";
 import { ApiError } from "@/lib/api";
 import {
-  marketApi, monthLabel, pctf, usd, ws, type Analysis, type CaliforniaData, type Category, type ConditionItem, type Deal,
-  type Doc, type Flag, type Item, type MarketResult,
+  compareApi, marketApi, monthLabel, pctf, usd, ws, type Adjustment, type Analysis, type CaliforniaData, type CaseReport,
+  type Category, type Comparison, type ConditionItem, type Deal, type Doc, type Flag, type Item, type MarketResult,
 } from "@/lib/workspace";
+import { screening } from "@/lib/screening";
 
 const STEPS: { key: string; label: string; later?: string }[] = [
   { key: "upload", label: "Upload" }, { key: "review", label: "Review" }, { key: "flags", label: "Flags" },
   { key: "market", label: "Market" }, { key: "california", label: "California" },
-  { key: "compare", label: "Compare", later: "Milestone 8" }, { key: "export", label: "Export", later: "Milestone 9" },
+  { key: "compare", label: "Compare" }, { key: "export", label: "Export" },
 ];
 
 const GLOSSARY = {
@@ -486,6 +487,197 @@ function CaliforniaStep({ deal, onChange }: { deal: Deal; onChange: () => void }
   );
 }
 
+// ---------------------------------------------------------------- Compare
+
+const fmtLine = (kind: "usd" | "pct", v: number | null | undefined) => (kind === "pct" ? pctf(v ?? null) : usd(v));
+const fmtDelta = (kind: "usd" | "pct", v: number) =>
+  Math.abs(v) < 1e-9 ? "" : kind === "pct" ? `${v > 0 ? "+" : "−"}${Math.abs(v * 100).toFixed(1)} pts` : `${v > 0 ? "+" : "−"}${usd(Math.abs(v))}`;
+const CASE_ROWS: [string, string, "usd" | "ratio" | "pct"][] = [
+  ["Effective gross income", "egi", "usd"], ["Net operating income", "noi", "usd"], ["Annual debt service", "annual_debt_service", "usd"],
+  ["DSCR", "dscr", "ratio"], ["LTV", "ltv", "pct"], ["Debt yield", "debt_yield", "pct"], ["Break-even occupancy", "break_even_occupancy", "pct"],
+];
+const LOAN_FIELDS: [string, string, string][] = [
+  ["value", "Value used for screening", "$"], ["loan_amount", "Loan amount", "$"], ["interest_rate_pct", "Interest rate", "%"],
+  ["amortization_years", "Amortization", "yrs"], ["interest_only_years", "Interest-only period", "yrs"], ["term_years", "Loan term", "yrs"],
+];
+
+function AdjustmentRow({ a, kind, label, onChange }: { a: Adjustment; kind: "usd" | "pct"; label: string; onChange: () => void }) {
+  const [value, setValue] = useState(a.underwritten_value === null ? "" : kind === "pct" ? String(+(a.underwritten_value * 100).toFixed(4)) : String(Math.round(a.underwritten_value)));
+  const [note, setNote] = useState(a.note);
+  const [error, setError] = useState<string | null>(null);
+  const parsed = () => { const n = Number(value.replace(/[$,%\s]/g, "")); return kind === "pct" ? n / 100 : n; };
+  async function set(status: Adjustment["status"]) {
+    try { await compareApi.patch(a.adjustment_id, { status, note, underwritten_value: parsed() }); onChange(); } catch (e) { setError(errText(e)); }
+  }
+  return (
+    <tr className={a.status === "approved" ? "" : a.status === "rejected" ? "row-muted" : "row-low"}>
+      <td>{label}<div className="muted" style={{ fontSize: 11 }}>{a.reason_code}{a.flag_fingerprint ? ` · from flag ${a.flag_fingerprint.split(":")[0]}` : " · manual"}</div></td>
+      <td className="num">{fmtLine(kind, a.borrower_value)}</td>
+      <td className="num"><input className="cell-input" value={value} onChange={(e) => setValue(e.target.value)} disabled={a.status === "approved"} />{kind === "pct" ? " %" : ""}</td>
+      <td><input type="text" value={note} onChange={(e) => setNote(e.target.value)} disabled={a.status === "approved"} style={{ width: "100%", minWidth: 220, fontSize: 12 }} /></td>
+      <td style={{ whiteSpace: "nowrap" }}>
+        <span className={`scr-status ${a.status === "approved" ? "PASS" : a.status === "rejected" ? "FAIL" : "NOT"}`}>{a.status}</span>{" "}
+        {a.status !== "approved" && <button className="linkbtn" onClick={() => set("approved")} disabled={!note.trim()}>Approve</button>}{" "}
+        {a.status !== "rejected" && <button className="linkbtn" onClick={() => set("rejected")}>Reject</button>}{" "}
+        {a.status !== "proposed" && <button className="linkbtn" onClick={() => set("proposed")}>Undo</button>}
+        {error && <div className="error" style={{ fontSize: 12 }}>{error}</div>}
+      </td>
+    </tr>
+  );
+}
+
+function CompareStep({ deal, onChange }: { deal: Deal; onChange: () => void }) {
+  const [c, setC] = useState<Comparison | null>(null);
+  const [loan, setLoan] = useState<Record<string, string>>({});
+  const [sets, setSets] = useState<{ set_id: number; name: string }[]>([]);
+  const [setId, setSetId] = useState<number | null>(null);
+  const [newAdj, setNewAdj] = useState({ line_item: "payroll", value: "", reason_code: "OTHER", note: "" });
+  const [msg, setMsg] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const apply = (x: Comparison) => {
+    setC(x); setSetId(x.guideline_set_id);
+    setLoan(Object.fromEntries(Object.entries(x.loan).map(([k, v]) => [k, v === null || v === undefined ? "" : String(v)])));
+  };
+  const load = useCallback(() => compareApi.get(deal.deal_id).then(apply).catch((e) => setError(errText(e))), [deal.deal_id]);
+  useEffect(() => { load(); screening.guidelines().then(setSets).catch(() => undefined); }, [load]);
+  if (!c) return error ? <div className="error">{error}</div> : <div className="empty">Loading…</div>;
+
+  async function saveLoan() {
+    const body = Object.fromEntries(Object.entries(loan).map(([k, v]) => [k, v === "" ? null : Number(v.replace(/[$,%\s]/g, ""))]));
+    try { apply(await compareApi.saveLoan(deal.deal_id, body, setId)); setError(null); } catch (e) { setError(errText(e)); }
+  }
+  async function suggest() {
+    try { const x = await compareApi.suggest(deal.deal_id); apply(x); setMsg(x.added ? `Added ${x.added} suggested adjustment(s) from open flags.` : "No new suggestions: every open flag already has one, or no flag has a numeric fix."); onChange(); }
+    catch (e) { setError(errText(e)); }
+  }
+  async function add() {
+    const kind = c!.lines.find((l) => l.key === newAdj.line_item)?.kind ?? "usd";
+    const n = Number(newAdj.value.replace(/[$,%\s]/g, ""));
+    try {
+      apply(await compareApi.add(deal.deal_id, { line_item: newAdj.line_item, underwritten_value: kind === "pct" ? n / 100 : n, reason_code: newAdj.reason_code, note: newAdj.note }));
+      setNewAdj({ ...newAdj, value: "", note: "" });
+    } catch (e) { setError(errText(e)); }
+  }
+
+  const b = c.borrower_case, u = c.underwritten_case;
+  const metric = (r: CaseReport, key: string, kind: string) => {
+    const v = r.metrics ? (r.metrics as Record<string, number | null>)[key] : null;
+    return kind === "ratio" ? (v === null || v === undefined ? "n/a" : v.toFixed(2)) : kind === "pct" ? pctf(v) : usd(v);
+  };
+  const kindOf = (k: string) => c.lines.find((l) => l.key === k)?.kind ?? "usd";
+  const order = { proposed: 0, approved: 1, rejected: 2 } as const;
+
+  return (
+    <div className="stack">
+      <section className="card">
+        <div className="card-head"><h2>Loan request</h2><span className="sub">Used for both cases. Borrower figures come from: {c.source}</span></div>
+        <div className="scr-actions" style={{ alignItems: "end" }}>
+          {LOAN_FIELDS.map(([k, label, unit]) => (
+            <label key={k} className="sub">{label} ({unit})<br /><input type="text" inputMode="decimal" value={loan[k] ?? ""} onChange={(e) => setLoan({ ...loan, [k]: e.target.value })} style={{ width: k === "value" || k === "loan_amount" ? 120 : 70 }} /></label>))}
+          <label className="sub">Guidelines<br /><select value={setId ?? ""} onChange={(e) => setSetId(Number(e.target.value))}>{sets.map((s) => <option key={s.set_id} value={s.set_id}>{s.name}</option>)}</select></label>
+          <button className="btn" onClick={saveLoan}>Save and recalculate</button>
+        </div>
+        {error && <div className="error" style={{ marginTop: 8 }}>{error}</div>}
+      </section>
+
+      <div className={`scr-overall ${u.overall === "FAIL" ? "FAIL" : u.overall === "PASS" ? "PASS" : "NOT"}`}>
+        <span style={{ fontSize: 15, fontWeight: 600 }}>{c.summary}</span>
+      </div>
+
+      <section className="card">
+        <div className="card-head"><h2>Results side by side</h2><span className="sub">Both cases run through the Tier 1 calculation engine</span></div>
+        <div className="table-wrap"><table>
+          <thead><tr><th /><th className="num">Borrower</th><th className="num">Underwritten</th></tr></thead>
+          <tbody>
+            {CASE_ROWS.map(([label, key, kind]) => <tr key={key}><td>{label}</td><td className="num">{metric(b, key, kind)}</td><td className="num"><b>{metric(u, key, kind)}</b></td></tr>)}
+            <tr><td>Guidelines ({u.guideline_set.name})</td>
+              <td className="num"><span className={`scr-status ${b.overall === "PASS" ? "PASS" : b.overall === "FAIL" ? "FAIL" : "NOT"}`}>{b.overall ?? "n/a"}</span></td>
+              <td className="num"><span className={`scr-status ${u.overall === "PASS" ? "PASS" : u.overall === "FAIL" ? "FAIL" : "NOT"}`}>{u.overall ?? "n/a"}</span></td></tr>
+          </tbody>
+        </table></div>
+        {u.rules && <div className="sub" style={{ marginTop: 8 }}>Underwritten: {u.rules.filter((r) => r.status !== "NOT CHECKED").map((r) => r.message).join(" · ")}</div>}
+      </section>
+
+      <section className="card">
+        <div className="card-head"><h2>Borrower vs underwritten (annual)</h2><span className="sub">Only approved adjustments change the underwritten column</span></div>
+        <div className="table-wrap"><table>
+          <thead><tr><th>Line item</th><th className="num">Borrower</th><th className="num">Underwritten</th><th className="num">Change</th><th>Reason</th><th>Note / source</th></tr></thead>
+          <tbody>
+            {c.lines.map((l) => (
+              <tr key={l.key}><td>{l.label}</td><td className="num">{fmtLine(l.kind, l.borrower)}</td><td className="num"><b>{fmtLine(l.kind, l.underwritten)}</b></td>
+                <td className="num" style={{ whiteSpace: "nowrap" }}>{fmtDelta(l.kind, l.delta)}</td><td style={{ fontSize: 12 }}>{l.adjustment?.reason_code ?? ""}</td>
+                <td className="sub" style={{ fontSize: 12, minWidth: 260 }}>{l.adjustment ? `${l.adjustment.note}${l.adjustment.flag_fingerprint ? ` (flag ${l.adjustment.flag_fingerprint.split(":")[0]})` : ""}` : ""}</td></tr>))}
+            {(["egi", "expenses", "reserves", "noi"] as const).map((k) => (
+              <tr key={k} className="subtotal"><td><b>{{ egi: "Effective gross income", expenses: "Operating expenses", reserves: "Reserves", noi: "Net operating income" }[k]}</b></td>
+                <td className="num">{usd(c.totals.borrower[k])}</td><td className="num"><b>{usd(c.totals.underwritten[k])}</b></td><td className="num">{fmtDelta("usd", c.totals.difference[k])}</td><td /><td /></tr>))}
+          </tbody>
+        </table></div>
+      </section>
+
+      <section className="card">
+        <div className="card-head"><h2>Adjustments</h2>
+          <span className="sub">Every adjustment needs a reason and a note. Suggestions come from open flags; approve, edit, or reject each one.</span></div>
+        <div className="scr-actions" style={{ marginBottom: 10 }}><button className="btn" onClick={suggest}>Suggest adjustments from flags</button>{msg && <span className="sub">{msg}</span>}</div>
+        {c.adjustments.length === 0 ? <div className="empty">No adjustments yet.</div> : (
+          <div className="table-wrap"><table className="review">
+            <thead><tr><th>Line item</th><th className="num">Borrower</th><th className="num">Underwritten</th><th>Note</th><th>Status</th></tr></thead>
+            <tbody>{[...c.adjustments].sort((x, y) => order[x.status] - order[y.status]).map((a) => (
+              <AdjustmentRow key={`${a.adjustment_id}-${a.status}`} a={a} kind={kindOf(a.line_item)} label={c.line_labels[a.line_item] ?? a.line_item} onChange={load} />))}</tbody>
+          </table></div>)}
+        <h3 style={{ margin: "14px 0 8px" }}>Add your own adjustment</h3>
+        <div className="scr-actions" style={{ alignItems: "end" }}>
+          <label className="sub">Line item<br /><select value={newAdj.line_item} onChange={(e) => setNewAdj({ ...newAdj, line_item: e.target.value })}>{c.lines.map((l) => <option key={l.key} value={l.key}>{l.label}</option>)}</select></label>
+          <label className="sub">Underwritten value{kindOf(newAdj.line_item) === "pct" ? " (%)" : " ($)"}<br /><input type="text" inputMode="decimal" value={newAdj.value} onChange={(e) => setNewAdj({ ...newAdj, value: e.target.value })} style={{ width: 110 }} /></label>
+          <label className="sub">Reason<br /><select value={newAdj.reason_code} onChange={(e) => setNewAdj({ ...newAdj, reason_code: e.target.value })}>{c.reason_codes.map((r) => <option key={r} value={r}>{r}</option>)}</select></label>
+          <label className="sub" style={{ flex: 1, minWidth: 220 }}>Note (required)<br /><input type="text" value={newAdj.note} onChange={(e) => setNewAdj({ ...newAdj, note: e.target.value })} style={{ width: "100%" }} /></label>
+          <button className="btn secondary" onClick={add} disabled={!newAdj.value || !newAdj.note.trim()}>Add</button>
+        </div>
+      </section>
+
+      {u.stress && u.stress.length > 0 && (
+        <section className="card">
+          <div className="card-head"><h2>Stress tests: underwritten case</h2></div>
+          <div className="table-wrap"><table>
+            <thead><tr><th>Scenario</th><th className="num">NOI</th><th className="num">DSCR</th><th className="num">LTV</th><th>Result</th></tr></thead>
+            <tbody>{u.stress.map((s) => (
+              <tr key={s.key}><td>{s.label}</td><td className="num">{usd(s.noi)}</td><td className="num">{s.dscr === null ? "n/a" : s.dscr.toFixed(2)}</td>
+                <td className="num">{pctf(s.ltv)}</td><td><span className={`scr-status ${s.overall === "PASS" ? "PASS" : s.overall === "FAIL" ? "FAIL" : "NOT"}`}>{s.overall}</span></td></tr>))}</tbody>
+          </table></div>
+        </section>)}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- Export
+
+function ExportStep({ deal }: { deal: Deal }) {
+  const [busy, setBusy] = useState<"" | "pdf" | "xlsx">("");
+  const [error, setError] = useState<string | null>(null);
+  async function get(kind: "pdf" | "xlsx") {
+    setBusy(kind); setError(null);
+    try { await compareApi.download(deal.deal_id, kind); } catch (e) { setError(errText(e)); } finally { setBusy(""); }
+  }
+  return (
+    <section className="card">
+      <div className="card-head"><h2>Export</h2><span className="sub">Screening and underwriting support only. Not an appraisal, legal advice, or a credit approval.</span></div>
+      <div className="grid-2">
+        <div>
+          <h3 style={{ marginBottom: 6 }}>PDF underwriting memo</h3>
+          <p className="sub">Summary sentence, borrower vs underwritten table with reasons, results side by side, stress tests, every flag with its evidence and source, market support with sources, and the data-source list. The disclaimer is on every page. Tenant names never appear.</p>
+          <button className="btn" onClick={() => get("pdf")} disabled={!!busy}>{busy === "pdf" ? "Preparing…" : "Download PDF"}</button>
+        </div>
+        <div>
+          <h3 style={{ marginBottom: 6 }}>Excel workbook (live formulas)</h3>
+          <p className="sub">Borrower, Adjustments, Underwritten, Flags and Comps sheets, plus the Tier 1 calculation sheets. Change an adjustment&apos;s value or status on the Adjustments sheet and the underwritten NOI, DSCR and guideline results recalculate.</p>
+          <button className="btn" onClick={() => get("xlsx")} disabled={!!busy}>{busy === "xlsx" ? "Preparing…" : "Download Excel"}</button>
+        </div>
+      </div>
+      {error && <div className="error" style={{ marginTop: 12 }}>{error}</div>}
+    </section>
+  );
+}
+
 // ---------------------------------------------------------------- page
 
 function Workspace() {
@@ -532,6 +724,8 @@ function Workspace() {
       {step === "flags" && <FlagsStep dealId={dealId} />}
       {step === "market" && <MarketStep deal={deal} onChange={load} />}
       {step === "california" && <CaliforniaStep deal={deal} onChange={load} />}
+      {step === "compare" && <CompareStep deal={deal} onChange={load} />}
+      {step === "export" && <ExportStep deal={deal} />}
     </>
   );
 }

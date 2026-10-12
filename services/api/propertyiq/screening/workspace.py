@@ -25,6 +25,7 @@ from propertyiq.screening.intake.schema import CATEGORY_SECTION, RentRollUnit, S
 from propertyiq.screening.store import _writer
 
 UPLOAD_DIR = REPO_ROOT / "data" / "uploads"
+ZERO = Decimal(0)
 
 
 class WorkspaceError(ValueError):
@@ -419,9 +420,27 @@ def market(deal_id: int, kind: str, address: str, city: str, radius: float, max_
         out["implied"] = {"price": price, "units": n_units, "noi": noi,
                           "price_per_unit": price / n_units if price and n_units else None,
                           "cap_rate": noi / price if noi and price else None}
+    market_last = {**deal["property_facts"].get("market_last", {}), kind: {"provider": provider, "query_key": q.key()}}
     with _writer() as conn:
         conn.execute("UPDATE screening_deals SET property_facts = property_facts || %s, updated_at = now() "
-                     "WHERE deal_id = %s", (dumps({"address": address, "city": city}), deal_id))
+                     "WHERE deal_id = %s",
+                     (dumps({"address": address, "city": city, "market_last": market_last}), deal_id))
+    return out
+
+
+def last_market(deal_id: int) -> dict[str, dict]:
+    """The most recent cached rent and sale comp results for this deal (for exports)."""
+    from propertyiq.screening import market as mk
+    last = get_deal(deal_id)["property_facts"].get("market_last", {})
+    out = {}
+    with db.connection() as conn:
+        for kind, k in last.items():
+            row = conn.execute("SELECT results, retrieved_at FROM screening_market_cache WHERE provider = %s AND "
+                               "query_key = %s", (k["provider"], k["query_key"])).fetchone()
+            if row:
+                res = row["results"]
+                res["summary"] = mk.sale_summary(res["comps"]) if kind == "sale" else None
+                out[kind] = res
     return out
 
 
@@ -465,3 +484,173 @@ def california(deal_id: int, facts: dict | None = None, condition: list[dict] | 
         Decimal(settings_store.setting("example_tax_rate", "0.012")), as_of)
     save_flags(deal_id, flags, prefix="R")
     return load_flags(deal_id)
+
+
+# ---------------------------------------------------------------- borrower vs underwritten (Milestone 8)
+
+LOAN_FIELDS = ("loan_amount", "interest_rate_pct", "amortization_years", "interest_only_years", "term_years")
+
+
+def _case_inputs(deal_id: int) -> dict:
+    """Everything the comparison needs, from approved data only."""
+    deal = get_deal(deal_id)
+    facts = {**deal["borrower_inputs"], **deal["property_facts"]}
+    units, lines, _subs, _docs = approved_data(deal_id)
+    n_units = facts.get("units") or (len(units) if units else None)
+    t12 = None
+    if lines:
+        months = sorted({m for ln in lines for m in ln.months})
+        t12 = calcs.t12_metrics(lines, months, units=n_units)
+    rr = calcs.rent_roll_metrics(units, date.today()) if units else None
+    value = _dec(facts.get("value")) or _dec(facts.get("purchase_price"))
+    return {"deal": deal, "facts": facts, "units": int(n_units) if n_units else None, "t12": t12, "rr": rr,
+            "value": value}
+
+
+def list_adjustments(deal_id: int) -> list[dict]:
+    with db.connection() as conn:
+        return conn.execute("SELECT * FROM screening_adjustments WHERE deal_id = %s ORDER BY adjustment_id",
+                            (deal_id,)).fetchall()
+
+
+def suggest_adjustments(deal_id: int) -> int:
+    """Turn open flags into PROPOSED adjustments (computed from the data, not parsed from flag text).
+    Existing adjustments for the same flag and line are left alone. Returns how many were added."""
+    from propertyiq.screening import compare, settings_store
+    ci = _case_inputs(deal_id)
+    t12, rr, units, facts = ci["t12"], ci["rr"], ci["units"], ci["facts"]
+    borrower, _src = compare.borrower_lines(t12, facts, ci["value"])
+    open_flags = {f["fingerprint"]: f for f in load_flags(deal_id) if f["status"] == "open"}
+    existing = {(a["flag_fingerprint"], a["line_item"]) for a in list_adjustments(deal_id)}
+    bench = {(b["category"], b["basis"]): b for b in benchmarks()
+             if b["property_type"] == facts.get("property_type", "multifamily")}
+    proposals: list[tuple] = []
+
+    def propose(fp: str, line: str, value: Decimal, reason: str, note: str) -> None:
+        if fp in open_flags and (fp, line) not in existing and value is not None:
+            proposals.append((line, borrower.get(line), value, reason, note, fp))
+
+    if t12 is not None:
+        a = t12.annual_by_category
+        gross = borrower["gross_potential_rent"] + borrower["other_income"]
+        if rr is not None and rr.physical_occupancy is not None and gross:
+            credit = abs(a.get("concessions", ZERO)) + abs(a.get("bad_debt", ZERO))
+            vac = (1 - rr.physical_occupancy) * borrower["gross_potential_rent"]
+            proposed = max(borrower["vacancy_pct"], (vac + credit) / gross)
+            propose("A1:vacancy", "vacancy_pct", proposed, "VACANCY",
+                    f"Rent roll shows {(1 - rr.physical_occupancy) * 100:.1f}% of units empty; vacancy and credit loss "
+                    f"set to {proposed * 100:.1f}% of recurring gross income (was {borrower['vacancy_pct'] * 100:.1f}%).")
+        if rr is not None:
+            propose("A2:rent", "gross_potential_rent", rr.gross_potential_annual, "MARKET_RENT",
+                    "Gross potential rent from the current rent roll (in-place rent on occupied units plus market rent "
+                    "on vacant units, x 12) instead of the T-12.")
+        for fp in [f for f in open_flags if f.startswith("A3:label:")]:
+            propose(fp, "non_recurring_income", ZERO, "ONE_TIME_ITEM_REMOVED",
+                    f"Removed one-time income ({fp.split(':', 2)[2]}) that won't repeat.")
+        units_d = Decimal(units) if units else None
+        for fp, line in (("A4:insurance", "insurance"), ("A4:repairs_maintenance", "repairs_maintenance"),
+                         ("A4:utilities", "utilities"), ("A4:administrative", "administrative")):
+            b = bench.get((line, "per_unit"))
+            if b and units_d and b.get("typical") is not None:
+                propose(fp, line, Decimal(str(b["typical"])) * units_d, "EXPENSE_BELOW_BENCHMARK",
+                        f"Underwritten at the typical ${b['typical']:,.0f} per unit (benchmark: {b['source']}).")
+        b = bench.get(("management_fee", "pct_egi"))
+        if b and b.get("typical") is not None:
+            egi = compare.totals({**borrower, "non_recurring_income": ZERO}).egi
+            rate = Decimal(str(b["typical"]))
+            propose("A5:management_fee", "management_fee", egi * rate, "MANAGEMENT_FEE",
+                    f"Market management fee at {rate * 100:.1f}% of recurring effective gross income (${egi:,.0f}).")
+    price = _dec(facts.get("purchase_price"))
+    if price and facts.get("transaction") == "purchase":
+        rate = Decimal(settings_store.setting("example_tax_rate", "0.012"))
+        propose("R1:prop13", "real_estate_taxes", price * rate, "TAX_REASSESSMENT",
+                f"Prop 13 reassessment on purchase: ${price:,.0f} x {rate * 100:.2f}% example rate. Confirm the county rate.")
+    if units:
+        per_unit = Decimal(settings_store.setting("example_reserve_per_unit", "300"))
+        total = next((e["value"] for e in open_flags.get("R5:capex_total", {}).get("evidence", [])
+                      if e["label"] == "Total of your estimates"), None)
+        propose("R5:capex_total", "reserves", per_unit * units, "DEFERRED_MAINTENANCE",
+                f"Replacement reserve of ${per_unit:,.0f} per unit (example; set your own). Deferred maintenance "
+                f"estimate {total or 'n/a'}: consider a holdback at closing, which isn't part of NOI.")
+    m1 = open_flags.get("M1:price_per_unit")
+    if m1 and units:
+        med = next((e["value"] for e in m1["evidence"] if e["label"] == "Comp median price per unit"), None)
+        if med:
+            comp_value = Decimal(med.replace("$", "").replace(",", "")) * units
+            if ci["value"] is None or comp_value < ci["value"]:
+                propose("M1:price_per_unit", "value", comp_value, "OTHER",
+                        f"Value at the sale-comp median {med} per unit x {units} units for LTV, below the price. "
+                        "Comps are support, not an appraisal.")
+    if proposals:
+        with _writer() as conn:
+            with conn.cursor() as cur:
+                cur.executemany(
+                    "INSERT INTO screening_adjustments (deal_id, line_item, borrower_value, underwritten_value, reason_code, "
+                    "note, flag_fingerprint, status) VALUES (%s,%s,%s,%s,%s,%s,%s,'proposed')",
+                    [(deal_id, line, bv, uv, reason, note, fp) for line, bv, uv, reason, note, fp in proposals])
+    return len(proposals)
+
+
+def add_adjustment(deal_id: int, line_item: str, value: Decimal, reason: str, note: str) -> None:
+    from propertyiq.screening import compare
+    if line_item not in compare.LINE_KEYS:
+        raise WorkspaceError("Unknown line item.")
+    if reason not in compare.REASON_CODES:
+        raise WorkspaceError("Choose a reason code.")
+    if not note.strip():
+        raise WorkspaceError("Every adjustment needs a note explaining it.")
+    ci = _case_inputs(deal_id)
+    borrower, _ = compare.borrower_lines(ci["t12"], ci["facts"], ci["value"])
+    with _writer() as conn:
+        conn.execute("INSERT INTO screening_adjustments (deal_id, line_item, borrower_value, underwritten_value, "
+                     "reason_code, note, status) VALUES (%s,%s,%s,%s,%s,%s,'proposed')",
+                     (deal_id, line_item, borrower.get(line_item), value, reason, note.strip()))
+
+
+def update_adjustment(adjustment_id: int, fields: dict) -> None:
+    from propertyiq.screening import compare
+    with db.connection() as conn:
+        adj = conn.execute("SELECT * FROM screening_adjustments WHERE adjustment_id = %s", (adjustment_id,)).fetchone()
+    if adj is None:
+        raise LookupError("Adjustment not found")
+    new = {**adj, **{k: v for k, v in fields.items() if v is not None}}
+    if new["reason_code"] not in compare.REASON_CODES:
+        raise WorkspaceError("Choose a reason code.")
+    if not str(new["note"]).strip():
+        raise WorkspaceError("Every adjustment needs a note explaining it.")
+    with _writer() as conn, conn.transaction():
+        if new["status"] == "approved":
+            # One approved adjustment per line: approving this one sets any other approved one back to proposed.
+            conn.execute("UPDATE screening_adjustments SET status = 'proposed', updated_at = now() WHERE deal_id = %s "
+                         "AND line_item = %s AND status = 'approved' AND adjustment_id <> %s",
+                         (adj["deal_id"], adj["line_item"], adjustment_id))
+        conn.execute("UPDATE screening_adjustments SET underwritten_value = %s, reason_code = %s, note = %s, status = %s, "
+                     "updated_at = now() WHERE adjustment_id = %s",
+                     (new["underwritten_value"], new["reason_code"], str(new["note"]).strip(), new["status"], adjustment_id))
+
+
+def delete_adjustment(adjustment_id: int) -> None:
+    with _writer() as conn:
+        if conn.execute("DELETE FROM screening_adjustments WHERE adjustment_id = %s", (adjustment_id,)).rowcount == 0:
+            raise LookupError("Adjustment not found")
+
+
+def save_loan(deal_id: int, loan: dict, guideline_set_id: int | None) -> None:
+    clean = {k: loan.get(k) for k in LOAN_FIELDS + ("value",) if k in loan}
+    update_deal(deal_id, borrower_inputs={**get_deal(deal_id)["borrower_inputs"], **clean},
+                guideline_set_id=guideline_set_id)
+
+
+def comparison(deal_id: int) -> dict:
+    from propertyiq.screening import compare, store
+    ci = _case_inputs(deal_id)
+    deal, facts = ci["deal"], ci["facts"]
+    borrower, source = compare.borrower_lines(ci["t12"], facts, ci["value"])
+    adjustments = list_adjustments(deal_id)
+    underwritten = compare.apply(borrower, adjustments)
+    row = store.get_set(deal["guideline_set_id"]) if deal.get("guideline_set_id") else (store.list_sets() or [None])[0]
+    g = store.to_guideline_set(row["name"], row["rules"])
+    result = compare.run(borrower, underwritten, deal["borrower_inputs"], g, deal["name"],
+                         facts.get("property_type", "multifamily"))
+    return {"deal": deal, "source": source, "borrower": borrower, "underwritten": underwritten,
+            "adjustments": adjustments, "guideline_set_id": row["set_id"], **result}

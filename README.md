@@ -15,6 +15,7 @@ A private, self-hosted AI analyst for a **fictional** real estate portfolio. It 
 | 1a: Schema, synthetic seed, verified analytics API, tests | ✅ Done |
 | 1b: Next.js UI and local AI chat, with checked figures | ✅ Done. 99 tests pass. Chat answers in about 7–15 seconds with `qwen3:4b-instruct-2507`. |
 | Tier 1: Loan screening module (lender guidelines, stress tests, PDF and Excel export) | ✅ Done, on branch `tier1-loan-screening`. See [loan-screening.md](docs/loan-screening.md). |
+| Tier 2: Document intake (rent roll, T-12, OCR), anomaly flags, market comps, California red flags, borrower vs underwritten comparison, PDF and Excel memo | ✅ Done, on branch `tier2-intake-and-flags`. See [document-intake.md](docs/document-intake.md). |
 | 2: Document Q&A over local embeddings, citations, prompt-injection test | Planned |
 | 3: Audit log, rate limits, backups, offline proof with egress blocked, 50-question evaluation | Planned |
 
@@ -79,6 +80,8 @@ cd apps\web; npx tsc --noEmit; npm run build
 | `/login` | Demo sign-in |
 | `/screening` | Loan screening: deal form, underwriting numbers, guideline PASS/FAIL, stress tests, DSCR grid, PDF and Excel export |
 | `/screening/guidelines` | Lender guideline sets |
+| `/screening/deals` | Deal workspace: Upload → Review → Flags → Market → California → Compare → Export |
+| `/screening/settings` | Benchmarks, California rules (with sources), component typical life, settings |
 
 Each chat answer is labeled with its source:
 
@@ -121,3 +124,4 @@ docs/                       architecture, security boundary, financial definitio
 - [Model evaluation](docs/model-evaluation.md)
 - [Demo script](docs/demo-script.md)
 - [Loan screening module](docs/loan-screening.md)
+- [Tier 2: document intake and underwriting](docs/document-intake.md)

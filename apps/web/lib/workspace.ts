@@ -156,3 +156,54 @@ export const marketApi = {
   saveCalifornia: (dealId: number, facts: Record<string, unknown>, condition: ConditionItem[]) =>
     call<{ flags: Flag[] }>(`/api/screening/deals/${dealId}/california`, put({ facts, condition })),
 };
+
+// ---------------------------------------------------------------- Milestones 8-9
+
+export interface Adjustment {
+  adjustment_id: number; line_item: string; borrower_value: number | null; underwritten_value: number | null;
+  reason_code: string; note: string; flag_fingerprint: string | null; status: "proposed" | "approved" | "rejected";
+}
+export interface CompareLine {
+  key: string; label: string; kind: "usd" | "pct"; section: string; borrower: number; underwritten: number; delta: number;
+  adjustment: Adjustment | null;
+}
+export interface CaseTotals { gross_income: number; losses: number; egi: number; expenses: number; reserves: number; noi: number }
+export interface CaseReport {
+  valid: boolean; errors: string[]; overall?: string;
+  metrics?: { egi: number; noi: number; annual_debt_service: number | null; dscr: number | null; ltv: number | null; debt_yield: number | null; break_even_occupancy: number | null };
+  rules?: { rule_id: string; label: string; status: string; message: string }[];
+  stress?: { key: string; label: string; noi: number; dscr: number | null; ltv: number | null; overall: string }[];
+  guideline_set: { set_id: number; name: string };
+}
+export interface Comparison {
+  source: string; lines: CompareLine[]; summary: string;
+  totals: { borrower: CaseTotals; underwritten: CaseTotals; difference: CaseTotals };
+  borrower_case: CaseReport; underwritten_case: CaseReport; adjustments: Adjustment[]; guideline_set_id: number;
+  loan: Record<string, number | null>; reason_codes: string[]; line_labels: Record<string, string>; added?: number;
+}
+
+export const compareApi = {
+  get: (dealId: number) => call<Comparison>(`/api/screening/deals/${dealId}/compare`),
+  saveLoan: (dealId: number, loan: Record<string, number | null>, guidelineSetId: number | null) =>
+    call<Comparison>(`/api/screening/deals/${dealId}/loan`, put({ ...loan, guideline_set_id: guidelineSetId })),
+  suggest: (dealId: number) => call<Comparison>(`/api/screening/deals/${dealId}/adjustments/suggest`, { method: "POST" }),
+  add: (dealId: number, body: { line_item: string; underwritten_value: number; reason_code: string; note: string }) =>
+    call<Comparison>(`/api/screening/deals/${dealId}/adjustments`, { method: "POST", body: JSON.stringify(body) }),
+  patch: (id: number, body: Partial<Pick<Adjustment, "underwritten_value" | "reason_code" | "note" | "status">>) =>
+    call(`/api/screening/adjustments/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  remove: (id: number) => call(`/api/screening/adjustments/${id}`, { method: "DELETE" }),
+  download: async (dealId: number, kind: "pdf" | "xlsx") => {
+    const t = token();
+    const res = await fetch(`/api/screening/deals/${dealId}/export/${kind}`, { headers: t ? { Authorization: `Bearer ${t}` } : {}, cache: "no-store" });
+    if (!res.ok) {
+      let detail = res.statusText;
+      try { const b = await res.json(); detail = typeof b.detail === "string" ? b.detail : detail; } catch { /* keep */ }
+      throw new ApiError(res.status, detail);
+    }
+    const name = /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") ?? "")?.[1] ?? `underwriting.${kind}`;
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement("a");
+    a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  },
+};

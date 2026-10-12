@@ -17,6 +17,14 @@ A local-only proof of concept on synthetic data, built for a potential enterpris
 - **Off switch:** `PIQ_SCREENING_ENABLED=false` removes it.
 - **Excel export:** formulas are checked by recalculating in OpenOffice (`scripts/office_recalc.py` runs under OpenOffice's Python 2.7). Keep `export_xlsx.py` formulas in step with `calc.py`.
 
+## Tier 2 (document intake and underwriting)
+
+- **Where it lives:** `screening/intake/`, `workspace.py`, `tier2_routes.py`, `market.py`, `ca_flags.py`, `compare.py` and `export_deal.py`. Read `docs/document-intake.md` first.
+- **Privacy:** tenant names are dropped at read time. Never add a code path that stores, shows or sends them.
+- **Rules:** California rules live in `screening_rules` with source URLs and verified dates. Don't hard-code ordinance details; mark anything unconfirmed as unverified.
+- **Fixtures:** regenerate with `scripts/make_screening_fixtures.py`. The planted problems are listed in `tests/screening_fixture_data.py`.
+- **Commit messages with quotes:** use `git commit -F <file>`, because PowerShell 5.1 splits quoted arguments.
+
 ## Commands (from the repo root)
 
 ```powershell

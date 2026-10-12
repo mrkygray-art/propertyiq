@@ -105,3 +105,5 @@ table.review select { max-width: 190px; font-size: 12px; padding: 3px 6px; }
 :root[data-theme="dark"] .conf-low, :root[data-theme="dark"] .sev.sev-medium { background: #3a2f12; color: #f0c060; }
 :root[data-theme="dark"] table.review tr.row-low td { background: #2a2414; }
 :root[data-theme="dark"] .sev.sev-low { background: #1a2a40; color: #86b6ef; }
+
+table.review tr.row-muted td { opacity: 0.55; }

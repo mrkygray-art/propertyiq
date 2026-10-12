@@ -11,6 +11,7 @@ from decimal import Decimal
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Path, UploadFile
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from propertyiq.screening import settings_store, workspace
@@ -37,6 +38,30 @@ class DealPatch(BaseModel):
 class ItemPatch(BaseModel):
     category: str | None = None
     data: dict[str, Any] | None = None
+
+
+class LoanIn(BaseModel):
+    value: Decimal | None = Field(None, ge=0, le=10_000_000_000)
+    loan_amount: Decimal | None = Field(None, ge=0, le=10_000_000_000)
+    interest_rate_pct: Decimal | None = Field(None, ge=0, le=100)
+    amortization_years: int | None = Field(None, ge=1, le=50)
+    interest_only_years: Decimal | None = Field(None, ge=0, le=50)
+    term_years: Decimal | None = Field(None, ge=0, le=50)
+    guideline_set_id: int | None = None
+
+
+class AdjustmentIn(BaseModel):
+    line_item: str = Field(pattern=r"^[a-z_]{1,40}$")
+    underwritten_value: Decimal = Field(ge=-10_000_000_000, le=10_000_000_000)
+    reason_code: str = Field(max_length=40)
+    note: str = Field(min_length=1, max_length=1000)
+
+
+class AdjustmentPatch(BaseModel):
+    underwritten_value: Decimal | None = Field(None, ge=-10_000_000_000, le=10_000_000_000)
+    reason_code: str | None = Field(None, max_length=40)
+    note: str | None = Field(None, max_length=1000)
+    status: Literal["proposed", "approved", "rejected"] | None = None
 
 
 class MarketIn(BaseModel):
@@ -224,6 +249,87 @@ def build_tier2_router(provider_getter, user_dependency) -> APIRouter:
     def put_california(deal_id: Id, body: CaliforniaIn) -> dict:
         flags = guard(workspace.california, deal_id, body.facts, [c.model_dump() for c in body.condition])
         return jsonable({"flags": [f for f in flags if f["rule_id"].startswith("R")]})
+
+    # ------------------------------------------------------------ borrower vs underwritten (Milestone 8)
+
+    def comparison_json(deal_id: int) -> dict:
+        from propertyiq.screening import compare
+        from propertyiq.screening.routes import report_json
+        c = guard(workspace.comparison, deal_id)
+        approved = {a["line_item"]: a for a in c["adjustments"] if a["status"] == "approved"}
+        lines = [{"key": k, "label": label, "kind": kind, "section": section,
+                  "borrower": c["borrower"][k], "underwritten": c["underwritten"][k],
+                  "delta": c["underwritten"][k] - c["borrower"][k], "adjustment": approved.get(k)}
+                 for k, label, kind, section in compare.LINES]
+        tb, tu = c["borrower_totals"], c["underwritten_totals"]
+        return jsonable({
+            "source": c["source"], "lines": lines, "summary": c["summary"],
+            "totals": {"borrower": tb, "underwritten": tu,
+                       "difference": {k: getattr(tu, k) - getattr(tb, k) for k in vars(tb)}},
+            "borrower_case": report_json(c["borrower_report"], c["guideline_set_id"]),
+            "underwritten_case": report_json(c["underwritten_report"], c["guideline_set_id"]),
+            "adjustments": c["adjustments"], "guideline_set_id": c["guideline_set_id"],
+            "loan": {k: c["deal"]["borrower_inputs"].get(k) for k in workspace.LOAN_FIELDS + ("value",)},
+            "reason_codes": list(compare.REASON_CODES), "line_labels": compare.LINE_LABEL,
+        })
+
+    @r.get("/deals/{deal_id}/compare")
+    def compare_view(deal_id: Id) -> dict:
+        return comparison_json(deal_id)
+
+    @r.put("/deals/{deal_id}/loan")
+    def put_loan(deal_id: Id, body: LoanIn) -> dict:
+        guard(workspace.save_loan, deal_id, body.model_dump(exclude={"guideline_set_id"}), body.guideline_set_id)
+        return comparison_json(deal_id)
+
+    @r.post("/deals/{deal_id}/adjustments/suggest")
+    def suggest(deal_id: Id) -> dict:
+        added = guard(workspace.suggest_adjustments, deal_id)
+        return {"added": added, **comparison_json(deal_id)}
+
+    @r.post("/deals/{deal_id}/adjustments")
+    def add_adjustment(deal_id: Id, body: AdjustmentIn) -> dict:
+        guard(workspace.add_adjustment, deal_id, body.line_item, body.underwritten_value, body.reason_code, body.note)
+        return comparison_json(deal_id)
+
+    @r.patch("/adjustments/{adjustment_id}")
+    def patch_adjustment(adjustment_id: Id, body: AdjustmentPatch) -> dict:
+        guard(workspace.update_adjustment, adjustment_id, body.model_dump(exclude_none=True))
+        return {"ok": True}
+
+    @r.delete("/adjustments/{adjustment_id}")
+    def remove_adjustment(adjustment_id: Id) -> dict:
+        guard(workspace.delete_adjustment, adjustment_id)
+        return {"ok": True}
+
+    # ------------------------------------------------------------ exports (Milestone 9)
+
+    def _export_inputs(deal_id: int):
+        c = guard(workspace.comparison, deal_id)
+        if not c["underwritten_report"].valid:
+            raise HTTPException(422, "Fix the deal before exporting: " + " ".join(c["underwritten_report"].errors))
+        return c, workspace.load_flags(deal_id), workspace.last_market(deal_id)
+
+    def _name(c: dict, ext: str) -> str:
+        import re
+        stem = re.sub(r"[^A-Za-z0-9]+", "-", c["deal"]["name"]).strip("-")[:50] or "deal"
+        return f"PropertyIQ-underwriting-{stem}-{date.today():%Y%m%d}.{ext}"
+
+    @r.get("/deals/{deal_id}/export/pdf")
+    def export_pdf(deal_id: Id) -> Response:
+        from propertyiq.screening.export_deal import render_deal_pdf
+        c, flags, market = _export_inputs(deal_id)
+        pdf = render_deal_pdf(c, flags, market, c["deal"]["documents"], settings_store.list_rules())
+        return Response(pdf, media_type="application/pdf",
+                        headers={"Content-Disposition": f'attachment; filename="{_name(c, "pdf")}"'})
+
+    @r.get("/deals/{deal_id}/export/xlsx")
+    def export_xlsx(deal_id: Id) -> Response:
+        from propertyiq.screening.export_deal import render_deal_xlsx
+        c, flags, market = _export_inputs(deal_id)
+        return Response(render_deal_xlsx(c, flags, market),
+                        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        headers={"Content-Disposition": f'attachment; filename="{_name(c, "xlsx")}"'})
 
     # ------------------------------------------------------------ settings (Milestone 5)
 
