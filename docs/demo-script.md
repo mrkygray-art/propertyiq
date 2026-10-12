@@ -14,7 +14,7 @@ Steps marked *(not built yet)* depend on later milestones.
 ## Run it
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File C:\Users\mrkyg\projects\propertyIQ\scripts\start.ps1
+powershell -ExecutionPolicy Bypass -File scripts\start.ps1
 ```
 
 **Before a live demo:** ask one question first to load the model, which takes about 30 seconds the first time. After that, answers take about 7–15 seconds.
