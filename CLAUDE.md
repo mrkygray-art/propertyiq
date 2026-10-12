@@ -10,6 +10,13 @@ A local-only proof of concept on synthetic data, built for a potential enterpris
 - **Don't change the four required properties** in `db/seeds/required_properties.json`, or the requirement of 55 properties with 4 flagged and a $420,000 shortfall, without Ky's say-so.
 - **Ask Ky before** pulling large models, installing big software, or deleting or replacing containers and volumes.
 
+## Loan screening module
+
+- **Where it lives:** `services/api/propertyiq/screening/` and `apps/web/app/screening/`. Read `docs/loan-screening.md` first.
+- **Add only:** don't change portfolio features for it. It hooks in at the end of `main.py` and with one line in `Shell.tsx`.
+- **Off switch:** `PIQ_SCREENING_ENABLED=false` removes it.
+- **Excel export:** formulas are checked by recalculating in OpenOffice (`scripts/office_recalc.py` runs under OpenOffice's Python 2.7). Keep `export_xlsx.py` formulas in step with `calc.py`.
+
 ## Commands (from the repo root)
 
 ```powershell

@@ -5,3 +5,5 @@ psycopg[binary]==3.3.6
 psycopg-pool==3.3.3
 httpx==0.28.1
 pytest==9.1.1
+reportlab==5.0.1
+openpyxl==3.1.5

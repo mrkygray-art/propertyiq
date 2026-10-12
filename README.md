@@ -14,6 +14,7 @@ A private, self-hosted AI analyst for a **fictional** real estate portfolio. It 
 | 0: Environment, model choice, architecture, threat model | ✅ Done |
 | 1a: Schema, synthetic seed, verified analytics API, tests | ✅ Done |
 | 1b: Next.js UI and local AI chat, with checked figures | ✅ Done. 99 tests pass. Chat answers in about 7–15 seconds with `qwen3:4b-instruct-2507`. |
+| Tier 1: Loan screening module (lender guidelines, stress tests, PDF and Excel export) | ✅ Done, on branch `tier1-loan-screening`. See [loan-screening.md](docs/loan-screening.md). |
 | 2: Document Q&A over local embeddings, citations, prompt-injection test | Planned |
 | 3: Audit log, rate limits, backups, offline proof with egress blocked, 50-question evaluation | Planned |
 
@@ -36,6 +37,7 @@ docker compose up -d
 .\.venv\Scripts\python.exe scripts\db_bootstrap.py   # roles: piq_owner, piq_readonly
 .\.venv\Scripts\python.exe scripts\migrate.py
 .\.venv\Scripts\python.exe scripts\seed.py           # 55 synthetic properties
+.\.venv\Scripts\python.exe scripts\screening_setup.py   # loan screening module (optional)
 
 # 3. Local models (one-time download, about 2.8 GB)
 ollama pull qwen3:4b-instruct-2507-q4_K_M
@@ -75,6 +77,8 @@ cd apps\web; npx tsc --noEmit; npm run build
 | `/properties/{id}` | Rule checks, 36-month NOI-vs-budget and occupancy charts, calculation trail with record IDs, monthly table, and chat focused on the property |
 | `/verified` | The exact verified payload and its SHA-256 |
 | `/login` | Demo sign-in |
+| `/screening` | Loan screening: deal form, underwriting numbers, guideline PASS/FAIL, stress tests, DSCR grid, PDF and Excel export |
+| `/screening/guidelines` | Lender guideline sets |
 
 Each chat answer is labeled with its source:
 
@@ -116,3 +120,4 @@ docs/                       architecture, security boundary, financial definitio
 - [Financial definitions and rules](docs/financial-definitions.md)
 - [Model evaluation](docs/model-evaluation.md)
 - [Demo script](docs/demo-script.md)
+- [Loan screening module](docs/loan-screening.md)

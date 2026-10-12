@@ -255,3 +255,11 @@ def chat_endpoint(user: User, body: ChatRequest) -> ChatResponse:
         calculation_link=f"/verified?period={result.period.isoformat()}",
         focus_property_id=result.focus_property_id, notes=result.notes, latency_ms=result.latency_ms,
     )
+
+
+# ---------------------------------------------------------------- optional modules
+
+# Tier 1 loan screening. Turn off with PIQ_SCREENING_ENABLED=false; nothing above depends on it.
+from propertyiq.screening.routes import build_router as build_screening_router, enabled as screening_enabled  # noqa: E402
+if screening_enabled():
+    app.include_router(build_screening_router(current_user))

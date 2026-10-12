@@ -19,7 +19,7 @@ The SQL and Python code in `services/api/propertyiq/finance.py` is the only sour
 | Actual-to-budget % | Actual ÷ budget × 100 | Not computed when the budget is zero or negative |
 | NOI YoY % | (current TTM NOI − prior TTM NOI) ÷ \|prior TTM NOI\| × 100 | Not computed when prior TTM NOI is zero or negative |
 | Occupancy | **Physical** occupancy: occupied size ÷ rentable size at the period's month end. Size is square feet for office, retail and industrial, and units for multifamily. | Not computed when the month-end record is missing |
-| Cap rate, DSCR | **Not calculated.** They need property values, debt service and approved definitions, which don't exist yet. | — |
+| Cap rate, DSCR | **Not calculated for the portfolio.** The synthetic portfolio has no property values or debt. The separate loan screening module calculates them from values a lender types in; see [loan-screening.md](loan-screening.md). | — |
 
 Portfolio-level occupancy is shown per asset class, weighted by size. Square feet and units are never added together. The portfolio summary also shows a simple average of property occupancy, labeled as such.
 
