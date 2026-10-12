@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "services" / "api"))
 from propertyiq.auth import hash_password  # noqa: E402
 from propertyiq.config import get_settings  # noqa: E402
+from propertyiq.lending.seed import seed_lending  # noqa: E402
 from propertyiq.seed.generator import GENERATOR_VERSION, USER_PASSWORD_ENV, generate  # noqa: E402
 
 
@@ -65,9 +66,12 @@ def main() -> None:
                 "INSERT INTO seed_runs (generator, random_seed, content_sha256, property_count) VALUES (%s, %s, %s, %s)",
                 (GENERATOR_VERSION, ds.seed, ds.content_sha256(), len(ds.properties)),
             )
+        # Reloading properties removes loans (foreign keys), so rebuild the synthetic lending data too.
+        lending = seed_lending(conn)
     print(
         f"seeded {len(ds.properties)} synthetic properties, {len(ds.financials)} monthly actuals, "
-        f"{len(ds.budgets)} monthly budgets, {len(ds.users)} demo users; sha256 {ds.content_sha256()[:16]}"
+        f"{len(ds.budgets)} monthly budgets, {len(ds.users)} demo users, {lending['loans']} synthetic loans; "
+        f"sha256 {ds.content_sha256()[:16]}"
     )
 
 

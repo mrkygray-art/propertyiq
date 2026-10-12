@@ -6,7 +6,7 @@ Compares the roadmap's features (F01–F15) with what already exists (see `docs/
 
 | ID | Feature | Status | What exists | Main gap |
 |---|---|---|---|---|
-| F01 | Debt and loan dashboard | Partial | Tier 1 engine: DSCR, LTV, debt yield, break-even, stress for one deal; Tier 2 underwritten case | No portfolio loan records, covenants, maturities, rate caps or charts |
+| F01 | Debt and loan dashboard | **Built 2026-10-11** (`docs/debt-dashboard.md`) | Tier 1 engine: DSCR, LTV, debt yield, break-even, stress for one deal; Tier 2 underwritten case | No portfolio loan records, covenants, maturities, rate caps or charts |
 | F02 | Asset performance cockpit | Partial | TTM NOI vs budget, occupancy, YoY, asset-class table, 36-month charts, calculation trail | NOI waterfall, variance heatmap, opex per unit/sq ft, collections, returns (no cash flows exist) |
 | F03 | Risk and concentration | Minimal | Asset-class mix | Region, tenant, lender, maturity concentration; DSCR-LTV quadrants |
 | F04 | Cash flow and stress testing | Partial | Tier 1 annual stress scenarios and rate × vacancy grid (one deal) | Monthly portfolio forecast, saved scenarios, tornado/fan charts, refinancing gaps |

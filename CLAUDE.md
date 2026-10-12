@@ -25,6 +25,12 @@ A local-only proof of concept on synthetic data, built for a potential enterpris
 - **Fixtures:** regenerate with `scripts/make_screening_fixtures.py`. The planted problems are listed in `tests/screening_fixture_data.py`.
 - **Commit messages with quotes:** use `git commit -F <file>`, because PowerShell 5.1 splits quoted arguments.
 
+## Debt dashboard
+
+- **Where it lives:** `services/api/propertyiq/lending/` (calc, store, service, seed, routes) and `apps/web/app/debt/`. Read `docs/debt-dashboard.md` first.
+- **Ratios aren't stored.** Balances, debt service and ratios are computed in `calc.py` from the loan terms. Every loan query joins `user_portfolio_access`.
+- **Reseeding:** `scripts/seed.py` reloads loans too (reloading properties cascades to them); `scripts/seed_loans.py` reloads only loans.
+
 ## Admin tools
 
 - **Where it lives:** `services/api/propertyiq/admin/`, `apps/web/app/admin/`, `scripts/lockdown.ps1` and `scripts/backup.py`. Read `docs/admin-lockdown.md` first.

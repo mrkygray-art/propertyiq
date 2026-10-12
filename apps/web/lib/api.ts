@@ -103,7 +103,7 @@ export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = storage()?.getItem(TOKEN_KEY);
   const res = await fetch(path, {
     ...init,

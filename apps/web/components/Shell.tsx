@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api, getUser, signOut, type Health, type LockdownMode, type User } from "@/lib/api";
 import ScreeningNavLink from "./ScreeningNavLink";
@@ -19,6 +19,7 @@ function Indicator({ ok, label }: { ok: boolean | null; label: string }) {
 
 export default function Shell({ children }: { children: (user: User) => React.ReactNode }) {
   const router = useRouter();
+  const path = usePathname();
   const [user, setUser] = useState<User | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
   const [lockdown, setLockdown] = useState<LockdownMode>("off");
@@ -45,7 +46,14 @@ export default function Shell({ children }: { children: (user: User) => React.Re
     <>
       <header className="topbar">
         <Link href="/" className="brand">Property<span>IQ</span></Link>
-        <ScreeningNavLink />
+        <nav style={{ display: "flex", gap: 14, fontSize: 13 }} aria-label="Modules">
+          {[{ href: "/", label: "Portfolio", on: path === "/" || path.startsWith("/properties") || path.startsWith("/verified") },
+            { href: "/debt", label: "Debt", on: path.startsWith("/debt") }].map((n) => (
+            <Link key={n.href} href={n.href} aria-current={n.on ? "page" : undefined}
+                  style={{ fontWeight: n.on ? 650 : 400, color: n.on ? "var(--text)" : undefined }}>{n.label}</Link>
+          ))}
+          <ScreeningNavLink />
+        </nav>
         <div className="status" aria-label="System status">
           <Indicator ok={health ? health.database : null} label="Database" />
           <Indicator ok={health ? health.local_model : null} label="Local model" />

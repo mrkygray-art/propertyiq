@@ -21,10 +21,5 @@ export default function ScreeningNavLink() {
 
   if (!on) return null;
   const active = path.startsWith("/screening");
-  return (
-    <nav style={{ display: "flex", gap: 14, fontSize: 13 }} aria-label="Modules">
-      <Link href="/" style={{ fontWeight: active ? 400 : 650, color: active ? undefined : "var(--text)" }}>Portfolio</Link>
-      <Link href="/screening" style={{ fontWeight: active ? 650 : 400, color: active ? "var(--text)" : undefined }}>Loan screening</Link>
-    </nav>
-  );
+  return <Link href="/screening" style={{ fontWeight: active ? 650 : 400, color: active ? "var(--text)" : undefined }}>Loan screening</Link>;
 }

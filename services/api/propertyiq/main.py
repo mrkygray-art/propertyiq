@@ -267,3 +267,7 @@ if screening_enabled():
 # Admin tools (security checklist, network lockdown). Admin role only, except the banner status.
 from propertyiq.admin.routes import build_router as build_admin_router  # noqa: E402
 app.include_router(build_admin_router(current_user))
+
+# Debt dashboard (synthetic loans, covenants, maturities). Fund-scoped like the portfolio.
+from propertyiq.lending.routes import build_router as build_debt_router  # noqa: E402
+app.include_router(build_debt_router(current_user))

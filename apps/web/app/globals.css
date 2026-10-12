@@ -271,3 +271,4 @@ details pre { white-space: pre-wrap; word-break: break-word; background: var(--s
 .lockdown-option p { font-size: 13px; color: var(--text-2); margin: 0; flex: 1; }
 .lockdown-option p.lockdown-warning { color: var(--warning); background: var(--warning-bg); border-radius: 6px; padding: 6px 8px; flex: none; }
 .lockdown-option button { align-self: flex-start; }
+.table-wrap table.wide { min-width: 760px; }
