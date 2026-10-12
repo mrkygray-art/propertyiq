@@ -30,7 +30,7 @@ function Deals() {
 
   return (
     <>
-      <div className="breadcrumb"><Link href="/screening">← Loan screening</Link></div>
+      <div className="breadcrumb"><Link href="/screening">← Loan screening</Link> · <Link href="/screening/settings">Screening settings</Link></div>
       <div className="page-head">
         <div>
           <h1>Deal workspace</h1>

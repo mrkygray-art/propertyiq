@@ -372,3 +372,96 @@ def set_flag_status(flag_id: int, status: str, note: str | None) -> None:
 
 def is_db_error(exc: Exception) -> bool:
     return isinstance(exc, psycopg.Error)
+
+
+# ---------------------------------------------------------------- market (Milestone 6)
+
+def _deal_noi_and_units(deal_id: int, deal: dict) -> tuple[Decimal | None, int | None, dict | None]:
+    """Recurring NOI from the approved T-12 (annualized), units, and rent-roll unit-type summary."""
+    units, lines, _subs, _docs = approved_data(deal_id)
+    facts = {**deal["borrower_inputs"], **deal["property_facts"]}
+    n_units = facts.get("units") or (len(units) if units else None)
+    noi = None
+    if lines:
+        months = sorted({m for ln in lines for m in ln.months})
+        noi = calcs.t12_metrics(lines, months, units=n_units).noi
+    by_type = None
+    if units:
+        rr = calcs.rent_roll_metrics(units, date.today())
+        by_type = {t.unit_type: {"avg_rent": t.avg_rent, "avg_market": t.avg_market} for t in rr.by_type}
+    return noi, (int(n_units) if n_units else None), by_type
+
+
+def market(deal_id: int, kind: str, address: str, city: str, radius: float, max_age: int,
+           provider: str = "synthetic", refresh: bool = False) -> dict:
+    from propertyiq.screening import market as mk, settings_store
+    deal = get_deal(deal_id)
+    noi, n_units, by_type = _deal_noi_and_units(deal_id, deal)
+    q = mk.CompQuery(kind, address, city, radius, max_age, sorted(by_type) if by_type and kind == "rent" else [],
+                     deal["property_facts"].get("property_type", "multifamily"))
+    stale_days = int(settings_store.setting("market_stale_days", "30"))
+    res = mk.get_comps(q, provider, refresh, stale_days)
+    if res.get("error"):
+        raise WorkspaceError(res["error"])
+    out: dict = {"result": res, "summary": None}
+    if kind == "rent":
+        subject = {k: {kk: (float(vv) if vv is not None else None) for kk, vv in v.items()} for k, v in (by_type or {}).items()}
+        out["summary"] = mk.rent_summary(res["comps"], subject)
+    else:
+        summary = mk.sale_summary(res["comps"])
+        out["summary"] = summary
+        facts = deal["property_facts"]
+        price = _dec(facts.get("purchase_price")) or _dec(deal["borrower_inputs"].get("value"))
+        flags = mk.m1_flags(summary, price, n_units, noi, Decimal(settings_store.setting("m1_price_gap_pct", "0.20")),
+                            Decimal(settings_store.setting("m1_cap_gap_points", "0.01")), res["provider_label"],
+                            res["retrieved_at"]) if res["comps"] else []
+        save_flags(deal_id, flags, prefix="M")
+        out["implied"] = {"price": price, "units": n_units, "noi": noi,
+                          "price_per_unit": price / n_units if price and n_units else None,
+                          "cap_rate": noi / price if noi and price else None}
+    with _writer() as conn:
+        conn.execute("UPDATE screening_deals SET property_facts = property_facts || %s, updated_at = now() "
+                     "WHERE deal_id = %s", (dumps({"address": address, "city": city}), deal_id))
+    return out
+
+
+# ---------------------------------------------------------------- California red flags (Milestone 7)
+
+def condition_items(deal_id: int) -> list[dict]:
+    with db.connection() as conn:
+        return conn.execute("SELECT item_key, details, estimated_cost FROM screening_condition_items WHERE deal_id = %s "
+                            "ORDER BY item_key", (deal_id,)).fetchall()
+
+
+def california(deal_id: int, facts: dict | None = None, condition: list[dict] | None = None,
+               as_of: date | None = None) -> list[dict]:
+    from propertyiq.screening import ca_flags, settings_store
+    get_deal(deal_id)
+    with _writer() as conn, conn.transaction():
+        if facts is not None:
+            conn.execute("UPDATE screening_deals SET property_facts = property_facts || %s, updated_at = now() "
+                         "WHERE deal_id = %s", (dumps(facts), deal_id))
+        if condition is not None:
+            conn.execute("DELETE FROM screening_condition_items WHERE deal_id = %s", (deal_id,))
+            for c in condition:
+                details = {k: v for k, v in (c.get("details") or {}).items() if v not in (None, "")}
+                if details or c.get("estimated_cost") not in (None, ""):
+                    conn.execute("INSERT INTO screening_condition_items (deal_id, item_key, details, estimated_cost) "
+                                 "VALUES (%s, %s, %s, %s)",
+                                 (deal_id, c["item_key"], dumps(details), c.get("estimated_cost") or None))
+    deal = get_deal(deal_id)
+    all_facts = {**deal["borrower_inputs"], **deal["property_facts"]}
+    _units, lines, _s, _d = approved_data(deal_id)
+    t12_annual = noi = None
+    if lines:
+        months = sorted({m for ln in lines for m in ln.months})
+        m = calcs.t12_metrics(lines, months, units=all_facts.get("units"))
+        t12_annual, noi = m.annual_by_category, m.noi
+    bench = next((b for b in benchmarks() if b["property_type"] == all_facts.get("property_type", "multifamily")
+                  and b["category"] == "repairs_maintenance" and b["basis"] == "per_unit"), None)
+    flags = ca_flags.evaluate(
+        all_facts, settings_store.list_rules(), t12_annual, noi, condition_items(deal_id),
+        settings_store.list_condition_life(), bench["low"] if bench else None,
+        Decimal(settings_store.setting("example_tax_rate", "0.012")), as_of)
+    save_flags(deal_id, flags, prefix="R")
+    return load_flags(deal_id)

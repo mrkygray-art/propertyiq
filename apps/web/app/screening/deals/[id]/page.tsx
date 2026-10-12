@@ -7,12 +7,13 @@ import Help from "@/components/Help";
 import Shell from "@/components/Shell";
 import { ApiError } from "@/lib/api";
 import {
-  monthLabel, pctf, usd, ws, type Analysis, type Category, type Deal, type Doc, type Flag, type Item,
+  marketApi, monthLabel, pctf, usd, ws, type Analysis, type CaliforniaData, type Category, type ConditionItem, type Deal,
+  type Doc, type Flag, type Item, type MarketResult,
 } from "@/lib/workspace";
 
-const STEPS = [
+const STEPS: { key: string; label: string; later?: string }[] = [
   { key: "upload", label: "Upload" }, { key: "review", label: "Review" }, { key: "flags", label: "Flags" },
-  { key: "market", label: "Market", later: "Milestone 6" }, { key: "california", label: "California", later: "Milestone 7" },
+  { key: "market", label: "Market" }, { key: "california", label: "California" },
   { key: "compare", label: "Compare", later: "Milestone 8" }, { key: "export", label: "Export", later: "Milestone 9" },
 ];
 
@@ -233,7 +234,7 @@ function FlagCard({ f, onChange }: { f: Flag; onChange: () => void }) {
         {f.status === "dismissed" && <span className="scr-status NOT" style={{ marginLeft: 8 }}>Dismissed</span>}
       </div>
       <p style={{ margin: "6px 0" }}>{f.explanation}</p>
-      <dl className="kv" style={{ margin: "6px 0" }}>{f.evidence.map((e, i) => <Fragment key={i}><dt>{e.label}</dt><dd>{e.value}</dd></Fragment>)}</dl>
+      <dl className="kv" style={{ margin: "6px 0" }}>{f.evidence.map((e, i) => <Fragment key={i}><dt>{e.label}</dt><dd>{/^https?:\/\//.test(e.value) ? <a href={e.value} target="_blank" rel="noreferrer noopener">{e.value}</a> : e.value}</dd></Fragment>)}</dl>
       <div className="sub"><b>Suggested action:</b> {f.suggested_action}</div>
       <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>Source: {f.sources.join(" · ")}</div>
       {f.status === "dismissed" ? (
@@ -283,6 +284,208 @@ function FlagsStep({ dealId }: { dealId: number }) {
   );
 }
 
+// ---------------------------------------------------------------- Market
+
+type RentRow = {
+  unit_type: string; n: number; median: number | null; low: number | null; high: number | null;
+  subject_in_place: number | null; subject_market: number | null;
+  subject_in_place_vs_median_pct: number | null; subject_market_vs_median_pct: number | null;
+};
+type SaleSummary = {
+  n: number; price_per_unit: { median: number | null; low: number | null; high: number | null };
+  cap_rate: { median: number | null; n: number; note: string }; date_range: string[] | null;
+};
+const diffPct = (v: number | null) => (v === null ? "—" : `${v >= 0 ? "+" : "−"}${Math.abs(v * 100).toFixed(1)}%`);
+
+function MarketHeader({ r, onRefresh, busy }: { r: MarketResult; onRefresh: () => void; busy: boolean }) {
+  return (
+    <div className="sub" style={{ marginBottom: 8 }}>
+      {r.result.synthetic && <span className="sev sev-medium">Synthetic demo data</span>}
+      <b>{r.result.provider_label}</b> · retrieved {new Date(r.result.retrieved_at).toLocaleString()}{r.result.cached ? " (cached)" : ""}
+      {r.result.stale && <span className="sev sev-high" style={{ marginLeft: 6 }}>Stale: older than {r.result.stale_days} days</span>}
+      {" · "}{r.result.area} · {r.result.comps.length} comps{" "}
+      <button className="linkbtn" onClick={onRefresh} disabled={busy}>Refresh</button>
+      {r.result.notes.map((n, i) => <div key={i}>{n}</div>)}
+    </div>
+  );
+}
+
+function MarketStep({ deal, onChange }: { deal: Deal; onChange: () => void }) {
+  const [address, setAddress] = useState(String(deal.property_facts.address ?? ""));
+  const [city, setCity] = useState(String(deal.property_facts.city ?? ""));
+  const [radius, setRadius] = useState("1");
+  const [age, setAge] = useState("12");
+  const [res, setRes] = useState<{ rent?: MarketResult; sale?: MarketResult }>({});
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function get(kind: "rent" | "sale", refresh = false) {
+    setBusy(true); setError(null);
+    try {
+      const r = await marketApi.comps(deal.deal_id, { kind, address, city, radius_miles: Number(radius) || 1, max_age_months: Number(age) || 12, refresh });
+      setRes((x) => ({ ...x, [kind]: r })); onChange();
+    } catch (e) { setError(errText(e)); } finally { setBusy(false); }
+  }
+
+  const sale = res.sale;
+  const saleSummary = sale?.summary as SaleSummary | undefined;
+  return (
+    <div className="stack">
+      <section className="card">
+        <div className="card-head"><h2>Market and comps</h2><span className="sub">Comps support your judgment. They are not an appraisal.</span></div>
+        <div className="scr-actions" style={{ alignItems: "end" }}>
+          <label className="sub">Address<br /><input type="text" value={address} onChange={(e) => setAddress(e.target.value)} style={{ width: 240 }} /></label>
+          <label className="sub">City<br /><input type="text" value={city} onChange={(e) => setCity(e.target.value)} style={{ width: 150 }} /></label>
+          <label className="sub">Radius (miles)<br /><input type="text" inputMode="decimal" value={radius} onChange={(e) => setRadius(e.target.value)} style={{ width: 80 }} /></label>
+          <label className="sub">Max age (months)<br /><input type="text" inputMode="numeric" value={age} onChange={(e) => setAge(e.target.value)} style={{ width: 80 }} /></label>
+          <button className="btn" disabled={busy || !address || !city} onClick={() => get("rent")}>Rent comps</button>
+          <button className="btn" disabled={busy || !address || !city} onClick={() => get("sale")}>Sale comps</button>
+        </div>
+        <p className="hint">This prototype uses an offline synthetic provider (fictional comps for Los Angeles, Santa Monica, Long Beach, Torrance and Pasadena). A real provider can be added later; it would be the only feature that needs the internet.</p>
+        {error && <div className="error">{error}</div>}
+      </section>
+
+      {res.rent && (
+        <section className="card">
+          <div className="card-head"><h2>Rent comps</h2></div>
+          <MarketHeader r={res.rent} onRefresh={() => get("rent", true)} busy={busy} />
+          {res.rent.result.comps.length === 0 ? <div className="empty">No comps available.</div> : (<>
+            <div className="table-wrap"><table>
+              <thead><tr><th>Unit type</th><th className="num">Comps</th><th className="num">Median</th><th className="num">Range</th>
+                <th className="num">Subject in-place</th><th className="num">vs median</th><th className="num">Subject market</th><th className="num">vs median</th></tr></thead>
+              <tbody>{(res.rent.summary as RentRow[]).map((r) => (
+                <tr key={r.unit_type}><td>{r.unit_type}</td><td className="num">{r.n}</td><td className="num">{usd(r.median)}</td>
+                  <td className="num">{r.n ? `${usd(r.low)} – ${usd(r.high)}` : "—"}</td>
+                  <td className="num">{usd(r.subject_in_place)}</td><td className="num">{diffPct(r.subject_in_place_vs_median_pct)}</td>
+                  <td className="num">{usd(r.subject_market)}</td><td className="num">{diffPct(r.subject_market_vs_median_pct)}</td></tr>))}</tbody>
+            </table></div>
+            <details style={{ marginTop: 8 }}><summary>All {res.rent.result.comps.length} rent comps</summary>
+              <div className="table-wrap"><table>
+                <thead><tr><th>Source ID</th><th>Address</th><th>Type</th><th className="num">Sq ft</th><th className="num">Rent</th><th className="num">$/sq ft</th><th className="num">Miles</th><th>Listed</th></tr></thead>
+                <tbody>{res.rent.result.comps.map((c) => (
+                  <tr key={c.source_id}><td className="mono">{c.source_id}</td><td>{c.address}</td><td>{String(c.unit_type)}</td><td className="num">{String(c.sqft)}</td>
+                    <td className="num">{usd(c.rent)}</td><td className="num">${Number(c.rent_per_sqft).toFixed(2)}</td><td className="num">{c.distance_miles}</td><td>{String(c.listed)}</td></tr>))}</tbody>
+              </table></div></details>
+          </>)}
+        </section>)}
+
+      {sale && saleSummary && (
+        <section className="card">
+          <div className="card-head"><h2>Sale comps</h2></div>
+          <MarketHeader r={sale} onRefresh={() => get("sale", true)} busy={busy} />
+          {sale.result.comps.length === 0 ? <div className="empty">No comps available.</div> : (<>
+            <div className="kpis">
+              <div className="kpi"><div className="label">Comp median price / unit</div><div className="value">{usd(saleSummary.price_per_unit.median)}</div><div className="note">{usd(saleSummary.price_per_unit.low)} – {usd(saleSummary.price_per_unit.high)} · {saleSummary.n} sales</div></div>
+              <div className="kpi"><div className="label">This deal: price / unit</div><div className="value">{usd(sale.implied?.price_per_unit)}</div><div className="note">{usd(sale.implied?.price)} for {sale.implied?.units ?? "?"} units</div></div>
+              <div className="kpi"><div className="label">Comp median cap rate</div><div className="value">{pctf(saleSummary.cap_rate.median, 2)}</div><div className="note">{saleSummary.cap_rate.note}</div></div>
+              <div className="kpi"><div className="label">This deal: implied cap rate</div><div className="value">{pctf(sale.implied?.cap_rate, 2)}</div><div className="note">Approved T-12 NOI {usd(sale.implied?.noi)}</div></div>
+            </div>
+            <div className="table-wrap" style={{ marginTop: 12 }}><table>
+              <thead><tr><th>Source ID</th><th>Address</th><th>Sold</th><th className="num">Price</th><th className="num">Units</th><th className="num">$/unit</th><th className="num">$/sq ft</th><th className="num">Built</th><th className="num">Cap rate</th></tr></thead>
+              <tbody>{sale.result.comps.map((c) => (
+                <tr key={c.source_id}><td className="mono">{c.source_id}</td><td>{c.address}</td><td>{String(c.sale_date)}</td><td className="num">{usd(c.price)}</td>
+                  <td className="num">{String(c.units)}</td><td className="num">{usd(c.price_per_unit)}</td><td className="num">${Number(c.price_per_sqft).toFixed(0)}</td>
+                  <td className="num">{String(c.year_built)}</td><td className="num">{c.cap_rate === null ? "not available" : `${(Number(c.cap_rate) * 100).toFixed(2)}% (reported by source)`}</td></tr>))}</tbody>
+            </table></div>
+            <p className="hint">Large gaps between the deal and the comps raise flag M1 on the Flags step.</p>
+          </>)}
+        </section>)}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- California
+
+const CONSTRUCTION = [["wood_frame", "Wood frame"], ["concrete", "Concrete"], ["masonry", "Masonry (brick/block)"], ["steel", "Steel"]];
+const PARKING = [["tuck_under", "Tuck-under (open, under the building)"], ["open_ground_floor", "Open ground floor"], ["surface", "Surface lot"], ["subterranean", "Underground garage"], ["none", "None"]];
+const SITE = [["gas_station", "Gas station"], ["dry_cleaner", "Dry cleaner"], ["auto_repair", "Auto repair"], ["industrial", "Industrial use"]];
+const R_NAMES: Record<string, string> = { R1: "Prop 13 property tax", R2: "Rent control", R3: "Seismic", R4: "Environmental", R5: "Deferred maintenance" };
+
+function CaliforniaStep({ deal, onChange }: { deal: Deal; onChange: () => void }) {
+  const [data, setData] = useState<CaliforniaData | null>(null);
+  const [facts, setFacts] = useState<Record<string, unknown>>({});
+  const [cond, setCond] = useState<Record<string, ConditionItem>>({});
+  const [flags, setFlags] = useState<Flag[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(() => marketApi.california(deal.deal_id).then((d) => {
+    setData(d); setFacts(d.facts); setFlags(d.flags);
+    setCond(Object.fromEntries(d.condition.map((c) => [c.item_key, c])));
+  }).catch((e) => setError(errText(e))), [deal.deal_id]);
+  useEffect(() => { load(); }, [load]);
+  if (!data) return error ? <div className="error">{error}</div> : <div className="empty">Loading…</div>;
+
+  const f = (k: string) => (facts[k] === undefined || facts[k] === null ? "" : String(facts[k]));
+  const setF = (k: string, v: unknown) => setFacts({ ...facts, [k]: v });
+  const num = (v: string) => (v === "" ? null : Number(v.replace(/[$,\s]/g, "")));
+  const site = (facts.site_history ?? {}) as Record<string, boolean>;
+  const setCondField = (key: string, field: string, v: string) => {
+    const c = cond[key] ?? { item_key: key, details: {}, estimated_cost: null };
+    setCond({ ...cond, [key]: field === "estimated_cost" ? { ...c, estimated_cost: num(v) } : { ...c, details: { ...c.details, [field]: v } } });
+  };
+
+  async function run() {
+    setBusy(true); setError(null);
+    try { const r = await marketApi.saveCalifornia(deal.deal_id, facts, Object.values(cond)); setFlags(r.flags); onChange(); }
+    catch (e) { setError(errText(e)); } finally { setBusy(false); }
+  }
+
+  return (
+    <div className="stack">
+      <section className="card">
+        <div className="card-head"><h2>Property facts</h2><span className="sub">These drive the California red flags. Screening flags only: never legal advice.</span></div>
+        <div className="grid-2">
+          <div className="stack" style={{ gap: 8 }}>
+            <div className="scr-field"><label>City</label><input type="text" value={f("city")} onChange={(e) => setF("city", e.target.value)} /></div>
+            <div className="scr-field"><label>Year built <Help text="Used as a stand-in for the certificate of occupancy date. For rent control, confirm the actual certificate date." /></label><input type="text" inputMode="numeric" value={f("year_built")} onChange={(e) => setF("year_built", num(e.target.value))} /></div>
+            <div className="scr-field"><label>Units</label><input type="text" inputMode="numeric" value={f("units")} onChange={(e) => setF("units", num(e.target.value))} /></div>
+            <div className="scr-field"><label>Stories</label><input type="text" inputMode="numeric" value={f("stories")} onChange={(e) => setF("stories", num(e.target.value))} /></div>
+          </div>
+          <div className="stack" style={{ gap: 8 }}>
+            <div className="scr-field"><label>Construction</label><select value={f("construction")} onChange={(e) => setF("construction", e.target.value)}><option value="">—</option>{CONSTRUCTION.map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
+            <div className="scr-field"><label>Parking <Help text="Soft-story: a building whose ground floor, often open tuck-under parking, is much weaker than the floors above and can collapse in an earthquake." /></label><select value={f("parking")} onChange={(e) => setF("parking", e.target.value)}><option value="">—</option>{PARKING.map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
+            <div className="scr-field"><label>Transaction <Help text="Prop 13: in California a sale generally resets the taxable value to roughly the purchase price, so the buyer's tax bill can be much higher. A plain refinance doesn't." /></label><select value={f("transaction")} onChange={(e) => setF("transaction", e.target.value)}><option value="">—</option><option value="purchase">Purchase</option><option value="refinance">Refinance</option></select></div>
+            <div className="scr-field"><label>Purchase price</label><div className="scr-prefix"><span>$</span><input type="text" inputMode="decimal" value={f("purchase_price")} onChange={(e) => setF("purchase_price", num(e.target.value))} /></div></div>
+          </div>
+        </div>
+        <div className="filters" style={{ marginTop: 10 }}>Past or neighbouring use <Help text="Gas stations, dry cleaners, auto repair and industrial sites can leave contamination. A Phase I ESA is a standard environmental report on a property's history and contamination risk." />
+          {SITE.map(([k, v]) => <label key={k}><input type="checkbox" checked={!!site[k]} onChange={(e) => setF("site_history", { ...site, [k]: e.target.checked })} /> {v}</label>)}</div>
+      </section>
+
+      <section className="card">
+        <div className="card-head"><h2>Property condition checklist</h2><span className="sub">Ages and materials you know; leave the rest blank. Your cost estimates add up to a deferred-maintenance total.</span></div>
+        <div className="table-wrap"><table className="review">
+          <thead><tr><th>Component</th><th className="num">Age (years)</th><th>Type / material / brand</th><th className="num">Estimated cost</th><th>Typical life</th></tr></thead>
+          <tbody>{data.life_table.map((l) => {
+            const c = cond[l.item_key];
+            return (
+              <tr key={l.item_key}><td>{l.label}</td>
+                <td className="num"><input className="cell-input" value={String(c?.details.age_years ?? "")} onChange={(e) => setCondField(l.item_key, "age_years", e.target.value.replace(/\D/g, ""))} /></td>
+                <td><input type="text" value={String(c?.details.type ?? "")} placeholder={l.flag_if ? `e.g. ${l.flag_if.split("|")[0]}` : ""} onChange={(e) => setCondField(l.item_key, "type", e.target.value)} style={{ width: 200, fontSize: 12 }} /></td>
+                <td className="num"><input className="cell-input" value={c?.estimated_cost ?? ""} onChange={(e) => setCondField(l.item_key, "estimated_cost", e.target.value)} /></td>
+                <td className="muted" style={{ fontSize: 12 }}>{l.typical_life ? `${l.typical_life} yrs` : "flag if present"}{l.is_example ? " (example)" : ""}</td></tr>);
+          })}</tbody>
+        </table></div>
+        <div className="scr-actions" style={{ marginTop: 12 }}><button className="btn" onClick={run} disabled={busy}>{busy ? "Checking…" : "Save and run California checks"}</button>
+          <Link href="/screening/settings" className="sub">Rules and typical-life settings</Link></div>
+        {error && <div className="error" style={{ marginTop: 8 }}>{error}</div>}
+      </section>
+
+      {flags && (
+        <section className="card">
+          <div className="card-head"><h2>California red flags</h2>
+            <span className="sub">{flags.filter((x) => x.status === "open").length} open · {["R1", "R2", "R3", "R4", "R5"].map((g) => `${g} ${flags.filter((x) => x.rule_id === g && x.status === "open").length}`).join(" · ")}</span></div>
+          {flags.length === 0 ? <div className="empty">Save the facts above to run the checks.</div> : (
+            <div className="stack">{["R1", "R2", "R3", "R4", "R5"].map((g) => {
+              const fs = flags.filter((x) => x.rule_id === g);
+              return fs.length ? <div key={g} className="stack" style={{ gap: 8 }}><h3>{g} · {R_NAMES[g]}</h3>{fs.map((x) => <FlagCard key={x.flag_id} f={x} onChange={load} />)}</div> : null;
+            })}</div>)}
+        </section>)}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------- page
 
 function Workspace() {
@@ -304,7 +507,7 @@ function Workspace() {
 
   return (
     <>
-      <div className="breadcrumb"><Link href="/screening/deals">← Deals</Link></div>
+      <div className="breadcrumb"><Link href="/screening/deals">← Deals</Link> · <Link href="/screening/settings">Screening settings</Link></div>
       <div className="page-head">
         <div><h1>{deal.name}</h1><div className="sub">{String(deal.property_facts.property_type ?? "")}{deal.property_facts.units ? ` · ${deal.property_facts.units} units` : ""} · Screening aid only: not an appraisal, legal advice, or a credit approval</div></div>
       </div>
@@ -327,6 +530,8 @@ function Workspace() {
           <ReviewStep key={current} docId={current} categories={cats} onChange={load} />
         </>))}
       {step === "flags" && <FlagsStep dealId={dealId} />}
+      {step === "market" && <MarketStep deal={deal} onChange={load} />}
+      {step === "california" && <CaliforniaStep deal={deal} onChange={load} />}
     </>
   );
 }

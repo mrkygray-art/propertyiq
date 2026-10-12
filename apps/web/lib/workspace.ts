@@ -107,3 +107,52 @@ export const usd = (v: unknown) => {
 };
 export const pctf = (v: number | null | undefined, d = 1) => (v === null || v === undefined ? "—" : `${(v * 100).toFixed(d)}%`);
 export const monthLabel = (m: string) => new Date(Date.UTC(+m.slice(0, 4), +m.slice(5) - 1, 1)).toLocaleString("en-US", { month: "short", year: "2-digit", timeZone: "UTC" });
+
+// ---------------------------------------------------------------- Milestones 5-7
+
+export interface Benchmark {
+  benchmark_id: number; property_type: string; category: string; basis: "per_unit" | "per_sf" | "pct_egi";
+  low: number | null; typical: number | null; high: number | null; source: string; last_reviewed: string; is_example: boolean;
+}
+export interface Rule {
+  rule_key: string; flag_id: string; jurisdiction: string; name: string; trigger: Record<string, unknown>;
+  description: string; source_url: string | null; last_verified: string | null; verified: boolean; notes: string;
+}
+export interface LifeRow {
+  item_key: string; label: string; typical_life: number | null; flag_if: string | null; source: string; last_reviewed: string; is_example: boolean;
+}
+export interface Setting { key: string; value: string; description: string }
+export interface Comp { source_id: string; address: string; distance_miles: number; url: string | null; [k: string]: unknown }
+export interface MarketResult {
+  result: { provider: string; provider_label: string; synthetic: boolean; retrieved_at: string; area: string; comps: Comp[];
+    notes: string[]; cached: boolean; age_days: number; stale: boolean; stale_days: number };
+  summary: unknown;
+  implied?: { price: number | null; units: number | null; noi: number | null; price_per_unit: number | null; cap_rate: number | null };
+}
+export interface ConditionItem { item_key: string; details: Record<string, string | number | null>; estimated_cost: number | null }
+export interface CaliforniaData {
+  facts: Record<string, unknown>; condition: ConditionItem[]; life_table: LifeRow[]; rules: Rule[]; flags: Flag[];
+}
+
+const put = (body: unknown) => ({ method: "PUT", body: JSON.stringify(body) });
+
+export const settingsApi = {
+  benchmarks: () => call<Benchmark[]>("/api/screening/benchmarks"),
+  addBenchmark: (b: Omit<Benchmark, "benchmark_id">) => call<Benchmark[]>("/api/screening/benchmarks", { method: "POST", body: JSON.stringify(b) }),
+  saveBenchmark: (b: Benchmark) => { const { benchmark_id, ...rest } = b; return call<Benchmark[]>(`/api/screening/benchmarks/${benchmark_id}`, put(rest)); },
+  deleteBenchmark: (id: number) => call<Benchmark[]>(`/api/screening/benchmarks/${id}`, { method: "DELETE" }),
+  rules: () => call<Rule[]>("/api/screening/rules"),
+  saveRule: (r: Rule) => call<Rule[]>(`/api/screening/rules/${r.rule_key}`, put(r)),
+  life: () => call<LifeRow[]>("/api/screening/condition-life"),
+  saveLife: (l: LifeRow) => call<LifeRow[]>(`/api/screening/condition-life/${l.item_key}`, put(l)),
+  settings: () => call<Record<string, Setting>>("/api/screening/settings"),
+  saveSetting: (key: string, value: string) => call<Record<string, Setting>>(`/api/screening/settings/${key}`, put({ value })),
+};
+
+export const marketApi = {
+  comps: (dealId: number, body: { kind: "rent" | "sale"; address: string; city: string; radius_miles: number; max_age_months: number; refresh?: boolean }) =>
+    call<MarketResult>(`/api/screening/deals/${dealId}/market`, { method: "POST", body: JSON.stringify(body) }),
+  california: (dealId: number) => call<CaliforniaData>(`/api/screening/deals/${dealId}/california`),
+  saveCalifornia: (dealId: number, facts: Record<string, unknown>, condition: ConditionItem[]) =>
+    call<{ flags: Flag[] }>(`/api/screening/deals/${dealId}/california`, put({ facts, condition })),
+};
