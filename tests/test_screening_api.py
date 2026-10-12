@@ -169,7 +169,10 @@ def test_screening_writer_cannot_touch_portfolio_tables():
 
 
 def test_off_switch_removes_module_and_keeps_everything_else():
-    code = ("import propertyiq.main as m; paths = {r.path for r in m.app.routes}; "
+    # Included routers are wrapped (no .path), so walk into them too.
+    code = ("import propertyiq.main as m; rs = list(m.app.routes); paths = set()\n"
+            "while rs:\n r = rs.pop(); paths.add(getattr(r, 'path', ''))\n"
+            " rs += getattr(getattr(r, 'original_router', None), 'routes', [])\n"
             "print(any(p.startswith('/api/screening') for p in paths), "
             "'/api/properties/underperforming' in paths, '/api/chat' in paths)")
     env = {**os.environ, "PIQ_SCREENING_ENABLED": "false", "PYTHONPATH": str(ROOT / "services" / "api")}

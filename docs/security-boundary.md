@@ -31,10 +31,12 @@ flowchart TB
 |---|---|---|
 | `analyst` | Synthetic Fund I and Fund II (55 properties) | Main demo user |
 | `restricted` | Synthetic Fund II only (27 properties) | Shows that blocked access really is blocked |
+| `guest` | Both funds, full use of the app | For showing the demo to someone else; its own password (`PIQ_GUEST_PASSWORD`) |
+| `admin` | Both funds, plus the Admin page | Security checklist and internet lockdown; its own password (`PIQ_ADMIN_PASSWORD`). See [admin-lockdown.md](admin-lockdown.md) |
 
 **Loan screening:** both users can use it. Guideline sets are shared, and deals aren't stored. Writes go through the `piq_screening_writer` database login, which can change only `screening_guideline_sets`. That's checked by `test_screening_writer_cannot_touch_portfolio_tables`.
 
-Both use the demo password `PIQ_DEMO_PASSWORD` from `.env`.
+`analyst` and `restricted` share the demo password `PIQ_DEMO_PASSWORD` from `.env`; `guest` and `admin` each have their own.
 
 ## Controls in place (Milestone 1)
 
@@ -77,11 +79,7 @@ Configuring the application to stay local doesn't prove that the machine stays l
 | AnyViewer (remote access software on this machine) | Its relay servers | Quit it during the offline demo, or document it as out of scope |
 | Windows itself | Updates, Defender, telemetry | Out of scope; record it in the demo notes |
 
-**Offline verification plan (Milestone 3):**
-1. Add Windows Firewall outbound block rules for `ollama.exe`, `ollama app.exe`, the venv's `python.exe`, `node.exe` and `com.docker.backend.exe`.
-2. Put the Compose network in `internal: true` mode where practical.
-3. Run the smoke test and a chat session.
-4. Capture `Get-NetTCPConnection` output and the firewall log (`pfirewall.log`), showing loopback traffic only and blocked attempts.
+**Lockdown (built):** the Admin page's internet lockdown adds outbound block rules for PropertyIQ's programs, or for the whole computer, and saves before/after connection evidence. The live checklist tests real connections from the API and from the database container. McAfee is registered as this PC's firewall and may override Windows Firewall, so the blocking has to be proven by those tests. See [admin-lockdown.md](admin-lockdown.md).
 
 ## Prompt injection (Milestone 2)
 
@@ -100,3 +98,4 @@ Configuring the application to stay local doesn't prove that the machine stays l
 - **No audit log yet.** Structured audit events are planned for Milestone 3.
 - **Superuser password on disk.** `POSTGRES_PASSWORD` sits in `.env` on disk. That's acceptable for a demo; production would use a secrets manager.
 - **Local admin is trusted.** Anyone with admin rights on this PC can read everything.
+- **Lockdown depends on the active firewall.** If McAfee overrides Windows Firewall, the lockdown rules have no effect; the checklist's connection tests detect this.

@@ -263,3 +263,7 @@ def chat_endpoint(user: User, body: ChatRequest) -> ChatResponse:
 from propertyiq.screening.routes import build_router as build_screening_router, enabled as screening_enabled  # noqa: E402
 if screening_enabled():
     app.include_router(build_screening_router(current_user))
+
+# Admin tools (security checklist, network lockdown). Admin role only, except the banner status.
+from propertyiq.admin.routes import build_router as build_admin_router  # noqa: E402
+app.include_router(build_admin_router(current_user))

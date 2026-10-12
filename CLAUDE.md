@@ -25,6 +25,13 @@ A local-only proof of concept on synthetic data, built for a potential enterpris
 - **Fixtures:** regenerate with `scripts/make_screening_fixtures.py`. The planted problems are listed in `tests/screening_fixture_data.py`.
 - **Commit messages with quotes:** use `git commit -F <file>`, because PowerShell 5.1 splits quoted arguments.
 
+## Admin tools
+
+- **Where it lives:** `services/api/propertyiq/admin/`, `apps/web/app/admin/`, `scripts/lockdown.ps1` and `scripts/backup.py`. Read `docs/admin-lockdown.md` first.
+- **No admin rights in the API.** The API never runs elevated: lockdown changes go through Windows' permission prompt. Keep the mode list fixed; never build the PowerShell command from request text.
+- **Firewall rules** stay in the group "PropertyIQ Lockdown". "Whole computer" mode cuts remote access, so don't run it while Ky is connected remotely.
+- **Checklist items** return evidence, never secret values. Add a test in `tests/test_admin.py` for any new check that could leak.
+
 ## Commands (from the repo root)
 
 ```powershell
