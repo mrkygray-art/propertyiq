@@ -44,6 +44,14 @@ def _status_formatting(ws, rng: str) -> None:
 
 
 def render_xlsx(r: Report) -> bytes:
+    wb, _refs = build_workbook(r)
+    buf = BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def build_workbook(r: Report) -> tuple[Workbook, dict[str, str]]:
+    """The Tier 1 workbook, plus the Inputs cell references so Tier 2 can drive them with formulas."""
     assert r.valid
     d, g = r.deal, r.guidelines
     wb = Workbook()
@@ -269,6 +277,4 @@ def render_xlsx(r: Report) -> bytes:
         sheet.oddFooter.center.size = 8
     wb.properties.title = f"Loan screening - {d.property_name or 'deal'}"
     wb.properties.creator = "PropertyIQ"
-    buf = BytesIO()
-    wb.save(buf)
-    return buf.getvalue()
+    return wb, ref

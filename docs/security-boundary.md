@@ -56,6 +56,14 @@ Both use the demo password `PIQ_DEMO_PASSWORD` from `.env`.
 | Model outage hides the numbers | The verified summary is always available | `test_model_down_still_returns_verified_numbers` |
 | Secrets leak | `.env` is in `.gitignore`; scripts never print secret values; `/health` returns only true/false values | `test_health_reveals_no_detail` |
 
+## Tier 2 uploads
+
+- **Storage:** uploaded files are kept in `data/uploads/` (outside the web app, ignored by git). "Delete" removes the file and everything read from it.
+- **Tenant details:** tenant names and contact details are dropped at read time. They're scrubbed from neighbouring cells too, so they never reach the database, screen, exports or AI. Tests check the database and exports for every fake tenant name.
+- **File checks:** uploads are limited to 10 MB, the file type is checked by content as well as extension, and password-protected PDFs are refused with a clear message.
+- **What the AI sees:** only T-12 label text, masked for emails, phones and names, with no amounts. Its answer must be a known category.
+- **Network:** OCR runs locally (RapidOCR). Hazard and environmental databases are links, not live lookups, so the app stays offline.
+
 ## Outbound network paths on this machine
 
 Configuring the application to stay local doesn't prove that the machine stays local. Known outbound paths:
