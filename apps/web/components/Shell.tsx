@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api, getUser, signOut, type Health, type User } from "@/lib/api";
+import ScreeningNavLink from "./ScreeningNavLink";
 
 function Indicator({ ok, label }: { ok: boolean | null; label: string }) {
   const cls = ok === null ? "unknown" : ok ? "ok" : "bad";
@@ -40,6 +41,7 @@ export default function Shell({ children }: { children: (user: User) => React.Re
     <>
       <header className="topbar">
         <Link href="/" className="brand">Property<span>IQ</span></Link>
+        <ScreeningNavLink />
         <div className="status" aria-label="System status">
           <Indicator ok={health ? health.database : null} label="Database" />
           <Indicator ok={health ? health.local_model : null} label="Local model" />

@@ -32,6 +32,8 @@ flowchart TB
 | `analyst` | Synthetic Fund I and Fund II (55 properties) | Main demo user |
 | `restricted` | Synthetic Fund II only (27 properties) | Shows that blocked access really is blocked |
 
+**Loan screening:** both users can use it. Guideline sets are shared, and deals aren't stored. Writes go through the `piq_screening_writer` database login, which can change only `screening_guideline_sets`. That's checked by `test_screening_writer_cannot_touch_portfolio_tables`.
+
 Both use the demo password `PIQ_DEMO_PASSWORD` from `.env`.
 
 ## Controls in place (Milestone 1)
