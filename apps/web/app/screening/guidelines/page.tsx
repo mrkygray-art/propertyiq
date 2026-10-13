@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import Help from "@/components/Help";
 import Shell from "@/components/Shell";
-import { ApiError } from "@/lib/api";
+import { ApiError, can, getUser } from "@/lib/api";
 import { PROPERTY_TYPES, screening, type GuidelineSet } from "@/lib/screening";
 
 type RuleKey = "min_dscr" | "max_ltv" | "min_debt_yield" | "max_break_even" | "min_loan" | "max_loan";
@@ -89,6 +89,7 @@ function Editor() {
         <div>
           <h1>Lender guidelines</h1>
           <div className="sub">Your own rules, applied to every deal. The starting values are examples only, not industry standards. Set your own.</div>
+      {!can(getUser(), "policy") && <p className="access-note" style={{ marginBottom: 12 }}>These are lender policy settings. You can read them; a credit officer or admin can change them.</p>}
         </div>
       </div>
       {message && <div className={message.kind === "error" ? "error" : "scr-overall PASS"} role="status" style={{ marginBottom: 16 }}>{message.text}</div>}

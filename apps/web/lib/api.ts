@@ -2,7 +2,27 @@
 
 export type RuleStatus = "triggered" | "not_triggered" | "not_evaluated";
 
-export interface User { username: string; display_name: string; role: string; portfolios: string[] }
+export type Permission = "view" | "work_deals" | "decide" | "policy" | "admin";
+export interface User { username: string; display_name: string; role: string; portfolios: string[]; permissions?: Permission[] }
+
+// Same table as services/api/propertyiq/access.py. Only used to hide controls; the API enforces every rule.
+const ROLE_PERMISSIONS: Record<string, Permission[]> = {
+  viewer: ["view"], analyst: ["view", "work_deals"], credit_officer: ["view", "work_deals", "decide", "policy"],
+  admin: ["view", "work_deals", "decide", "policy", "admin"],
+};
+export const ROLE_LABEL: Record<string, string> = { viewer: "Viewer", analyst: "Analyst", credit_officer: "Credit officer", admin: "Admin" };
+
+export function can(user: User | null, permission: Permission): boolean {
+  if (!user) return false;
+  return (user.permissions ?? ROLE_PERMISSIONS[user.role] ?? []).includes(permission);
+}
+
+export interface AuditEvent {
+  event_id: number; created_at: string; username: string; role: string | null; action: string;
+  outcome: "allowed" | "refused"; reason: "role" | "fund" | "sign_in" | null;
+  target_type: string | null; target_id: string | null; fund_id: string | null;
+}
+export interface AuditLog { retention_days: number; total: number; refused: number; failed_sign_ins: number; oldest: string | null; events: AuditEvent[] }
 
 export interface Rule {
   rule_id: string; status: RuleStatus; value: number | null; comparator: string; threshold: number; explanation: string;
@@ -156,4 +176,6 @@ export const api = {
   lockdown: () => request<FirewallStatus>("/api/admin/lockdown"),
   setLockdown: (mode: LockdownMode) =>
     request<{ requested: LockdownMode; message: string }>("/api/admin/lockdown", { method: "POST", body: JSON.stringify({ mode }) }),
+  audit: (outcome?: "allowed" | "refused") =>
+    request<AuditLog>(`/api/admin/audit${outcome ? `?outcome=${outcome}` : ""}`),
 };

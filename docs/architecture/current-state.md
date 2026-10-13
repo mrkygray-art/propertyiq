@@ -37,7 +37,7 @@ This document records what was **inspected on the running system**, as distinct 
 - **Users:** demo users in `demo_users`: `analyst` (both funds), `restricted` (Fund II), `guest` (both funds, its own password), and `admin` (test admin for the security checklist and lockdown, added 2026-10-11; its own password). Passwords are scrypt hashes.
 - **Sessions:** HMAC-signed bearer tokens lasting 8 hours, stored in the browser's `sessionStorage`.
 - **Portfolio analytics and chat:** fund scope is enforced inside every SQL query (a `JOIN` on `user_portfolio_access`). A property in another fund returns the same 404 as a missing one, and tests cover this.
-- **Loan screening (Tiers 1 and 2): not fund-scoped.** Deals, documents, guideline sets and settings are shared by every signed-in user, and any user can change them. The `restricted` user can see every screening deal. There are no roles beyond the user name, and no read-only guest.
+- **Loan screening (Tiers 1 and 2): not fund-scoped.** Deals, documents, guideline sets and settings are shared by every signed-in user, and any user can change them. The `restricted` user can see every screening deal. There are no roles beyond the user name, and no read-only guest. *(Fixed by Phase 0.5 on 2026-10-12: deals are fund-scoped and there are four roles. See [../access-control.md](../access-control.md).)*
 - **Database roles:**
 
   | Role | Can do |

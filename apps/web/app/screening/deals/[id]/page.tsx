@@ -5,7 +5,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import { Fragment, Suspense, useCallback, useEffect, useState } from "react";
 import Help from "@/components/Help";
 import Shell from "@/components/Shell";
-import { ApiError } from "@/lib/api";
+import { ApiError, can, getUser } from "@/lib/api";
 import {
   compareApi, marketApi, monthLabel, pctf, usd, ws, type Adjustment, type Analysis, type CaliforniaData, type CaseReport,
   type Category, type Comparison, type ConditionItem, type Deal, type Doc, type Flag, type Item, type MarketResult,
@@ -223,6 +223,7 @@ function FlagCard({ f, onChange }: { f: Flag; onChange: () => void }) {
   const [note, setNote] = useState("");
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const decide = can(getUser(), "decide");   // clearing flags is a credit officer's call
   async function set(status: "open" | "dismissed") {
     try { await ws.flagStatus(f.flag_id, status, status === "dismissed" ? note : undefined); onChange(); }
     catch (e) { setError(errText(e)); }
@@ -239,7 +240,9 @@ function FlagCard({ f, onChange }: { f: Flag; onChange: () => void }) {
       <div className="sub"><b>Suggested action:</b> {f.suggested_action}</div>
       <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>Source: {f.sources.join(" · ")}</div>
       {f.status === "dismissed" ? (
-        <div style={{ marginTop: 8 }}><span className="sub">Note: {f.dismissal_note}</span> <button className="linkbtn" onClick={() => set("open")}>Reopen</button></div>
+        <div style={{ marginTop: 8 }}><span className="sub">Note: {f.dismissal_note}</span> {decide && <button className="linkbtn" onClick={() => set("open")}>Reopen</button>}</div>
+      ) : !decide ? (
+        <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>A credit officer can dismiss this flag with a note.</div>
       ) : open ? (
         <div className="scr-actions" style={{ marginTop: 8 }}>
           <input type="text" placeholder="Why is this OK? (required)" value={note} onChange={(e) => setNote(e.target.value)} style={{ flex: 1, minWidth: 220 }} />
@@ -506,20 +509,28 @@ function AdjustmentRow({ a, kind, label, onChange }: { a: Adjustment; kind: "usd
   const [note, setNote] = useState(a.note);
   const [error, setError] = useState<string | null>(null);
   const parsed = () => { const n = Number(value.replace(/[$,%\s]/g, "")); return kind === "pct" ? n / 100 : n; };
+  const user = getUser();
+  const decide = can(user, "decide");                       // approve, reject, undo: credit officers
+  const editable = a.status === "proposed" ? can(user, "work_deals") : a.status !== "approved" && decide;
   async function set(status: Adjustment["status"]) {
     try { await compareApi.patch(a.adjustment_id, { status, note, underwritten_value: parsed() }); onChange(); } catch (e) { setError(errText(e)); }
+  }
+  async function save() {
+    try { await compareApi.patch(a.adjustment_id, { note, underwritten_value: parsed() }); onChange(); } catch (e) { setError(errText(e)); }
   }
   return (
     <tr className={a.status === "approved" ? "" : a.status === "rejected" ? "row-muted" : "row-low"}>
       <td>{label}<div className="muted" style={{ fontSize: 11 }}>{a.reason_code}{a.flag_fingerprint ? ` · from flag ${a.flag_fingerprint.split(":")[0]}` : " · manual"}</div></td>
       <td className="num">{fmtLine(kind, a.borrower_value)}</td>
-      <td className="num"><input className="cell-input" value={value} onChange={(e) => setValue(e.target.value)} disabled={a.status === "approved"} />{kind === "pct" ? " %" : ""}</td>
-      <td><input type="text" value={note} onChange={(e) => setNote(e.target.value)} disabled={a.status === "approved"} style={{ width: "100%", minWidth: 220, fontSize: 12 }} /></td>
+      <td className="num"><input className="cell-input" value={value} onChange={(e) => setValue(e.target.value)} disabled={!editable} />{kind === "pct" ? " %" : ""}</td>
+      <td><input type="text" value={note} onChange={(e) => setNote(e.target.value)} disabled={!editable} style={{ width: "100%", minWidth: 220, fontSize: 12 }} /></td>
       <td style={{ whiteSpace: "nowrap" }}>
         <span className={`scr-status ${a.status === "approved" ? "PASS" : a.status === "rejected" ? "FAIL" : "NOT"}`}>{a.status}</span>{" "}
-        {a.status !== "approved" && <button className="linkbtn" onClick={() => set("approved")} disabled={!note.trim()}>Approve</button>}{" "}
-        {a.status !== "rejected" && <button className="linkbtn" onClick={() => set("rejected")}>Reject</button>}{" "}
-        {a.status !== "proposed" && <button className="linkbtn" onClick={() => set("proposed")}>Undo</button>}
+        {!decide && editable && <button className="linkbtn" onClick={save} disabled={!note.trim()}>Save</button>}
+        {!decide && <span className="muted" style={{ fontSize: 11 }}> {a.status === "proposed" ? "A credit officer approves or rejects it." : ""}</span>}
+        {decide && a.status !== "approved" && <button className="linkbtn" onClick={() => set("approved")} disabled={!note.trim()}>Approve</button>}{" "}
+        {decide && a.status !== "rejected" && <button className="linkbtn" onClick={() => set("rejected")}>Reject</button>}{" "}
+        {decide && a.status !== "proposed" && <button className="linkbtn" onClick={() => set("proposed")}>Undo</button>}
         {error && <div className="error" style={{ fontSize: 12 }}>{error}</div>}
       </td>
     </tr>
@@ -701,8 +712,9 @@ function Workspace() {
     <>
       <div className="breadcrumb"><Link href="/screening/deals">← Deals</Link> · <Link href="/screening/settings">Screening settings</Link></div>
       <div className="page-head">
-        <div><h1>{deal.name}</h1><div className="sub">{String(deal.property_facts.property_type ?? "")}{deal.property_facts.units ? ` · ${deal.property_facts.units} units` : ""} · Screening aid only: not an appraisal, legal advice, or a credit approval</div></div>
+        <div><h1>{deal.name}</h1><div className="sub">{deal.fund_id} · {String(deal.property_facts.property_type ?? "")}{deal.property_facts.units ? ` · ${deal.property_facts.units} units` : ""} · Screening aid only: not an appraisal, legal advice, or a credit approval</div></div>
       </div>
+      {!can(getUser(), "work_deals") && <p className="access-note" style={{ marginBottom: 12 }}>Your role is view only: you can read this deal and download its exports, but changes are turned off.</p>}
       <nav className="steps" aria-label="Steps">
         {STEPS.map((s, i) => (
           <button key={s.key} className={`step${step === s.key ? " active" : ""}`} disabled={!!s.later}

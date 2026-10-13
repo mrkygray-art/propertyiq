@@ -16,7 +16,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from psycopg_pool import PoolTimeout
 from pydantic import BaseModel
 
-from propertyiq import analytics, auth, chat, db
+from propertyiq import access, analytics, audit, auth, chat, db
 from propertyiq.config import get_settings
 from propertyiq.finance import RuleSet, is_month_end, prioritize
 from propertyiq.lab import traces as lab_traces
@@ -94,26 +94,33 @@ User = Annotated[analytics.DemoUser, Depends(current_user)]
 PeriodParam = Annotated[date | None, Query(description="Quarter-end reporting period, e.g. 2026-09-30")]
 
 
+def user_out(user: analytics.DemoUser) -> UserOut:
+    return UserOut(username=user.username, display_name=user.display_name, role=user.role,
+                   portfolios=list(user.portfolios), permissions=access.permissions(user))
+
+
 @app.post("/api/auth/login", response_model=LoginResponse)
 def login(body: LoginRequest) -> LoginResponse:
     with db.connection() as conn:
         found = analytics.get_user(conn, body.username)
     stored = found[1] if found else _DUMMY_HASH
     if not auth.verify_password(body.password, stored) or found is None:
+        # A name that doesn't exist is logged as '(unknown)': it may be a password typed in the wrong box.
+        audit.record(found[0].username if found else audit.UNKNOWN_USER, found[0].role if found else None,
+                     "auth.sign_in", "refused", "sign_in")
         raise HTTPException(status_code=401, detail="Invalid username or password")
     user = found[0]
+    audit.allowed(user, "auth.sign_in")
     return LoginResponse(
         token=auth.issue_token(user.username, settings.session_secret),
         expires_in_seconds=auth.TOKEN_TTL_SECONDS,
-        user=UserOut(username=user.username, display_name=user.display_name, role=user.role,
-                     portfolios=list(user.portfolios)),
+        user=user_out(user),
     )
 
 
 @app.get("/api/me", response_model=UserOut)
 def me(user: User) -> UserOut:
-    return UserOut(username=user.username, display_name=user.display_name, role=user.role,
-                   portfolios=list(user.portfolios))
+    return user_out(user)
 
 
 # ---------------------------------------------------------------- analytics

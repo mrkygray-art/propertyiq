@@ -30,6 +30,7 @@ class UserOut(BaseModel):
     display_name: str
     role: str
     portfolios: list[str]
+    permissions: list[str] = []   # see propertyiq/access.py; the server enforces them on every request
 
 
 class LoginResponse(BaseModel):

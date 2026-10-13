@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
+from propertyiq import access, audit
 from propertyiq.config import load_dotenv
 from propertyiq.screening import DISCLAIMER, store
 from propertyiq.screening.calc import PROPERTY_TYPES, DealInputs, Scenario
@@ -248,26 +249,35 @@ def build_router(user_dependency) -> APIRouter:
     def list_guidelines() -> list[dict]:
         return [set_out(r) for r in store.list_sets()]
 
+    # Guideline sets are lender policy: credit officers and admins change them (propertyiq/access.py).
     @router.post("/guidelines")
-    def create_guidelines(body: GuidelineIn) -> dict:
+    def create_guidelines(body: GuidelineIn, user=Depends(user_dependency)) -> dict:
+        access.require(user, "policy", "policy.guidelines", "guidelines")
         try:
-            return set_out(store.save_set(body.name.strip(), rules_to_db(body)))
+            saved = set_out(store.save_set(body.name.strip(), rules_to_db(body)))
         except store.GuidelineError as e:
             raise HTTPException(400, str(e)) from None
+        audit.allowed(user, "policy.guidelines", "guidelines", saved["set_id"])
+        return saved
 
     @router.put("/guidelines/{set_id}")
-    def update_guidelines(set_id: Annotated[int, Path(ge=1)], body: GuidelineIn) -> dict:
+    def update_guidelines(set_id: Annotated[int, Path(ge=1)], body: GuidelineIn, user=Depends(user_dependency)) -> dict:
+        access.require(user, "policy", "policy.guidelines", "guidelines", set_id)
         try:
-            return set_out(store.save_set(body.name.strip(), rules_to_db(body), set_id))
+            saved = set_out(store.save_set(body.name.strip(), rules_to_db(body), set_id))
         except store.GuidelineError as e:
             raise HTTPException(400, str(e)) from None
+        audit.allowed(user, "policy.guidelines", "guidelines", set_id)
+        return saved
 
     @router.delete("/guidelines/{set_id}")
-    def delete_guidelines(set_id: Annotated[int, Path(ge=1)]) -> dict:
+    def delete_guidelines(set_id: Annotated[int, Path(ge=1)], user=Depends(user_dependency)) -> dict:
+        access.require(user, "policy", "policy.guidelines", "guidelines", set_id)
         try:
             store.delete_set(set_id)
         except store.GuidelineError as e:
             raise HTTPException(400, str(e)) from None
+        audit.allowed(user, "policy.guidelines", "guidelines", set_id)
         return {"deleted": set_id}
 
     return router

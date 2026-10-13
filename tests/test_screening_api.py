@@ -40,7 +40,7 @@ def client():
 
 @pytest.fixture(scope="module")
 def h(client):
-    r = client.post("/api/auth/login", json={"username": "analyst", "password": os.environ["PIQ_DEMO_PASSWORD"]})
+    r = client.post("/api/auth/login", json={"username": "credit1", "password": os.environ["PIQ_CREDIT_PASSWORD"]})
     return {"Authorization": f"Bearer {r.json()['token']}"}
 
 

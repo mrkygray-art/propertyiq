@@ -27,22 +27,28 @@ flowchart TB
 
 ## Roles
 
-| Role | Sees | Purpose |
-|---|---|---|
-| `analyst` | Synthetic Fund I and Fund II (55 properties) | Main demo user |
-| `restricted` | Synthetic Fund II only (27 properties) | Shows that blocked access really is blocked |
-| `guest` | Both funds, full use of the app | For showing the demo to someone else; its own password (`PIQ_GUEST_PASSWORD`) |
-| `admin` | Both funds, plus the Admin page | Security checklist and internet lockdown; its own password (`PIQ_ADMIN_PASSWORD`). See [admin-lockdown.md](admin-lockdown.md) |
+Since Phase 0.5 (2026-10-12) there are four roles: **viewer** (read only), **analyst** (works deals), **credit officer** (approves adjustments, clears flags, edits lender policy) and **admin**. What a user can see is set separately, by their fund grants. Full table, accounts and tests: [access-control.md](access-control.md).
 
-**Loan screening:** both users can use it. Guideline sets are shared, and deals aren't stored. Writes go through the `piq_screening_writer` database login, which can change only `screening_guideline_sets`. That's checked by `test_screening_writer_cannot_touch_portfolio_tables`.
+| User | Role | Sees | Purpose |
+|---|---|---|---|
+| `analyst` | Analyst | Fund I and Fund II (55 properties) | Main demo user |
+| `restricted` | Analyst | Fund II only (27 properties) | Shows that blocked access really is blocked |
+| `guest` | Credit officer | Both funds, full use of the app | For showing the demo to someone else; its own password (`PIQ_GUEST_PASSWORD`) |
+| `admin` | Admin | Both funds, plus the Admin page | Security checklist, internet lockdown and access audit; its own password (`PIQ_ADMIN_PASSWORD`). See [admin-lockdown.md](admin-lockdown.md) |
+| `viewer` | Viewer | Both funds | Read-only test account (`PIQ_VIEWER_PASSWORD`) |
+| `credit1` to `credit4` | Credit officer | Both funds, Fund I only, Fund II only, both funds | Credit officer test accounts (shared `PIQ_CREDIT_PASSWORD`) |
 
-`analyst` and `restricted` share the demo password `PIQ_DEMO_PASSWORD` from `.env`; `guest` and `admin` each have their own.
+**Loan screening:** each deal belongs to one fund and is visible only to users granted it; another fund's deal, document, flag or adjustment returns the same 404 as a missing one. Writes go through the `piq_screening_writer` database login, which can change only `screening_*` tables. That's checked by `test_screening_writer_cannot_touch_portfolio_tables`.
+
+`analyst` and `restricted` share the demo password `PIQ_DEMO_PASSWORD` from `.env`; the others have their own settings.
 
 ## Controls in place (Milestone 1)
 
 | Threat | Control | Verified by |
 |---|---|---|
 | Analyst reads another portfolio's data | Portfolio grants are part of every SQL `JOIN`. A blocked property returns the same 404 as a missing one. | `test_restricted_*` |
+| User reads or changes another fund's screening deal | Every deal has a fund; the fund check runs before anything else and answers 404, the same as a missing deal | `test_other_fund_*` in `test_access.py` |
+| Viewer or analyst makes a change their role doesn't allow | Role check on every write route (403), audited | `test_viewer_can_read_but_not_write`, `test_analyst_works_deals_but_cant_decide` |
 | Forged or expired session | HMAC-SHA256 signed tokens with expiry, compared in constant time | `test_auth_required`, `test_tampered_token_rejected` |
 | Login reveals whether a username exists | Unknown users run the same scrypt work and get the same error | `test_login_failures_are_indistinguishable` |
 | Model or user runs arbitrary SQL | No SQL is ever built from input. The API has fixed queries only, and the model will get tool functions, not SQL. | Code review; `test_property_id_validated` |
@@ -91,11 +97,12 @@ Configuring the application to stay local doesn't prove that the machine stays l
 ## Known gaps
 
 - **Demo-grade sign-in.** No MFA, no token revocation and no lockout yet. Rate limiting is planned for Milestone 3.
-- **Shared demo password.** Both demo users use the same password, and its hash is stored per user.
+- **Shared demo passwords.** `analyst` and `restricted` share one password, and the four credit officer test accounts share another. Each hash is stored per user.
+- **No self-approval check.** A credit officer can approve an adjustment they proposed themselves.
 - **Unencrypted local traffic.** Traffic between processes is plain HTTP over loopback.
 - **Session token in `sessionStorage`.** A script injected into the page could read it. The CSP still allows inline scripts, which Next.js needs. This is acceptable on loopback; production would use an httpOnly cookie.
 - **Chat routing is keyword-based.** An odd phrasing can land on the wrong answer type. It can't reach unauthorized data, but it can be unhelpful.
-- **No audit log yet.** Structured audit events are planned for Milestone 3.
+- **Audit log isn't tamper-evident.** Sign-ins, refusals and changes are logged in `access_audit` (Phase 0.5) by a login that can't edit rows, but anyone with the database superuser password could. There's no hash chain or copy off this PC.
 - **Superuser password on disk.** `POSTGRES_PASSWORD` sits in `.env` on disk. That's acceptable for a demo; production would use a secrets manager.
 - **Local admin is trusted.** Anyone with admin rights on this PC can read everything.
 - **Lockdown depends on the active firewall.** The rules worked with McAfee installed on 2026-10-12, but a McAfee update or settings change could override Windows Firewall. The checklist's connection tests detect this every time the Admin page loads.

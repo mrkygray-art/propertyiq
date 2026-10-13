@@ -119,6 +119,23 @@ def check_database() -> list[dict]:
                             "pass" if not stray else "fail",
                             "Limited to request_traces." if not stray else f"Also reachable: {', '.join(stray)}."))
 
+        if one("SELECT count(*) AS n FROM pg_roles WHERE rolname = 'piq_audit_writer'")["n"]:
+            stray = [r["relname"] for r in conn.execute(
+                "SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+                "WHERE n.nspname = 'piq' AND c.relkind IN ('r','p') AND c.relname <> 'access_audit' "
+                "AND has_table_privilege('piq_audit_writer', c.oid, 'SELECT, INSERT, UPDATE, DELETE, TRUNCATE')")]
+            edits = one("SELECT has_table_privilege('piq_audit_writer', 'piq.access_audit', 'UPDATE, TRUNCATE') AS e")["e"]
+            ok = not stray and not edits
+            out.append(item(A, "audit_writer_scope", "The audit writer can only add to the access audit",
+                            "pass" if ok else "fail",
+                            "Limited to adding and pruning access_audit rows; it can't edit them." if ok else
+                            (f"Also reachable: {', '.join(stray)}. " if stray else "") +
+                            ("It can edit audit rows." if edits else "")))
+        else:
+            out.append(item(A, "audit_writer_scope", "The audit writer can only add to the access audit", "warn",
+                            "piq_audit_writer doesn't exist, so nothing is being audited.",
+                            "Run: .\\.venv\\Scripts\\python.exe scripts\\access_setup.py"))
+
         pub = one("SELECT has_schema_privilege('public', 'public', 'CREATE') AS a, "
                   "has_schema_privilege('public', 'piq', 'CREATE') AS b")
         out.append(item(A, "public_create", "No account can create objects unless granted",
@@ -392,6 +409,7 @@ def check_backups() -> list[dict]:
 
 
 def check_accounts() -> list[dict]:
+    from propertyiq import access, audit
     from propertyiq.seed.generator import DEMO_USERS, USER_PASSWORD_ENV
     A = "Accounts"
     with db.connection() as conn:
@@ -399,18 +417,42 @@ def check_accounts() -> list[dict]:
             "SELECT u.username, u.role, coalesce(array_agg(a.portfolio_id ORDER BY a.portfolio_id) "
             "FILTER (WHERE a.portfolio_id IS NOT NULL), '{}') AS funds FROM demo_users u "
             "LEFT JOIN user_portfolio_access a ON a.username = u.username GROUP BY 1, 2 ORDER BY 1").fetchall()
+        try:
+            recent = conn.execute("SELECT count(*) AS n, max(created_at) AS last FROM access_audit "
+                                  "WHERE created_at > now() - interval '1 day'").fetchone()
+        except Exception:
+            conn.rollback()
+            recent = None
     shared = [u for u, *_ in DEMO_USERS if u not in USER_PASSWORD_ENV]
     desc = "; ".join(
         f"{r['username']} ({r['role']}, {', '.join(r['funds']) or 'no funds'}, password in "
         f"{USER_PASSWORD_ENV.get(r['username'], 'PIQ_DEMO_PASSWORD')})" for r in rows)
     admins = [r["username"] for r in rows if r["role"] == "admin"]
-    return [
+    unknown = [r["username"] for r in rows if r["role"] not in access.ROLES]
+    no_funds = [r["username"] for r in rows if not r["funds"]]
+    out = [
         item(A, "users", "Sign-in accounts", "info", desc + "."),
         item(A, "separate_passwords", "Guest and admin have their own passwords", "pass",
-             f"Only {', '.join(shared)} share PIQ_DEMO_PASSWORD; guest and admin each have their own."),
+             f"Only {', '.join(shared)} share PIQ_DEMO_PASSWORD; guest, admin, the viewer and the credit officers "
+             "have their own settings."),
         item(A, "admins", "Only the test admin can change security settings", "pass" if admins == ["admin"] else "warn",
              f"Admin accounts: {', '.join(admins) or 'none'}. Other users get 403 on admin pages."),
+        item(A, "roles", "Every account has a known role and at least one fund",
+             "pass" if not unknown and not no_funds else "fail",
+             f"Roles in use: {', '.join(sorted({r['role'] for r in rows}))}."
+             + (f" Unknown role: {', '.join(unknown)}." if unknown else "")
+             + (f" No funds: {', '.join(no_funds)}." if no_funds else "")),
     ]
+    if recent is None:
+        out.append(item(A, "audit_log", "Sign-ins, refusals and changes are audited", "warn",
+                        "The access_audit table doesn't exist yet.", "Run: .\\.venv\\Scripts\\python.exe scripts\\access_setup.py"))
+    else:
+        out.append(item(A, "audit_log", "Sign-ins, refusals and changes are audited",
+                        "pass" if recent["n"] else "info",
+                        f"{recent['n']} audit events in the last day"
+                        + (f", newest {recent['last']:%Y-%m-%d %H:%M}" if recent["last"] else "")
+                        + f". Kept {audit.RETENTION_DAYS} days; no passwords or document contents."))
+    return out
 
 
 # ---------------------------------------------------------------- all together

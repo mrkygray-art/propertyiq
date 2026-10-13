@@ -112,7 +112,7 @@ Charts stay as custom SVG: no new chart library, nothing loaded from the interne
 | Admin | A separate test `admin` account with a security checklist and internet lockdown. **Done:** see `docs/admin-lockdown.md`. |
 | Firewall rules | Approved. Built as lockdown modes that need Windows' permission prompt for each change. |
 | Backups | Approved, with a restore test. **Done:** `scripts/backup.py`; local folder outside the repo for now. |
-| Roles, fund-scoped screening deals, access audit | Approved (Phase 0.5) |
+| Roles, fund-scoped screening deals, access audit | Approved (Phase 0.5). **Built 2026-10-12:** see `docs/access-control.md`. Owner's follow-up choices: the recommended analyst/credit officer split, the demo deal in Fund II, a 90-day audit retention, a viewer test account, and four credit officer test accounts |
 | Traces | Stages, IDs and timings only, no prompt text; 30-day retention |
 | Phases | Phase 1 (AI Engineering Lab), then Phases 2–5 |
 

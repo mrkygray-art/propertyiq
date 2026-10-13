@@ -30,16 +30,28 @@ SPEC_PATH = Path(__file__).resolve().parents[4] / "db" / "seeds" / "required_pro
 ASSET_COUNTS = {"office": 14, "retail": 14, "industrial": 14, "multifamily": 13}  # 55 total
 
 PORTFOLIOS = [("FUND-I", "Synthetic Fund I"), ("FUND-II", "Synthetic Fund II")]
+# Roles (see propertyiq/access.py): viewer, analyst, credit_officer, admin. The funds list is what each
+# user can see; it's separate from the role.
 DEMO_USERS = [
     ("analyst", "Demo Analyst (all funds)", "analyst", ["FUND-I", "FUND-II"]),
-    ("restricted", "Demo Restricted Analyst (Fund II only)", "restricted_analyst", ["FUND-II"]),
-    # Guest sign-in for showing the demo to someone else; its own password (PIQ_GUEST_PASSWORD).
-    ("guest", "Guest (demo viewer)", "analyst", ["FUND-I", "FUND-II"]),
+    ("restricted", "Demo Restricted Analyst (Fund II only)", "analyst", ["FUND-II"]),
+    # Guest sign-in for showing the demo to someone else; full access (owner decision); PIQ_GUEST_PASSWORD.
+    ("guest", "Guest (full access)", "credit_officer", ["FUND-I", "FUND-II"]),
     # Test admin: security checklist and network lockdown; its own password (PIQ_ADMIN_PASSWORD).
     ("admin", "Admin (test)", "admin", ["FUND-I", "FUND-II"]),
+    # Read-only test account; PIQ_VIEWER_PASSWORD.
+    ("viewer", "Demo Viewer (all funds, read only)", "viewer", ["FUND-I", "FUND-II"]),
+    # Credit officer test accounts with different fund grants; all four share PIQ_CREDIT_PASSWORD.
+    ("credit1", "Credit Officer 1 (all funds)", "credit_officer", ["FUND-I", "FUND-II"]),
+    ("credit2", "Credit Officer 2 (Fund I only)", "credit_officer", ["FUND-I"]),
+    ("credit3", "Credit Officer 3 (Fund II only)", "credit_officer", ["FUND-II"]),
+    ("credit4", "Credit Officer 4 (all funds)", "credit_officer", ["FUND-I", "FUND-II"]),
 ]
 # Which .env setting holds each user's password. Users not listed use PIQ_DEMO_PASSWORD.
-USER_PASSWORD_ENV = {"guest": "PIQ_GUEST_PASSWORD", "admin": "PIQ_ADMIN_PASSWORD"}
+USER_PASSWORD_ENV = {"guest": "PIQ_GUEST_PASSWORD", "admin": "PIQ_ADMIN_PASSWORD", "viewer": "PIQ_VIEWER_PASSWORD",
+                     **{f"credit{i}": "PIQ_CREDIT_PASSWORD" for i in range(1, 5)}}
+# Names for setting one shared password for several users at once (scripts/set_demo_password.py --user credit).
+PASSWORD_GROUPS = {"credit": "PIQ_CREDIT_PASSWORD"}
 MARKETS = ["Metro North", "Metro South", "Lakeshore", "Inland Valley", "Coastal Plain"]
 
 PREFIXES = [

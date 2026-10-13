@@ -18,7 +18,7 @@ It is a proof of concept built to show how a private, auditable AI system for re
 - **Every figure shows its work.** Answers link to a calculation trail: inputs, formulas, reporting windows, monthly source record IDs and a SHA-256 of the facts the model saw.
 - **Local by design.** Services listen on `127.0.0.1` only, the model adapter refuses remote hosts, and no hosted-AI library is installed. An admin page checks all of this live, with evidence.
 - **Access is enforced in the database queries,** not in prompts. A user who can't see a fund's loans gets the same 404 as for a loan that doesn't exist.
-- **279 automated tests.** Expected loan values come from the specification and from an independent plain-math version of each formula, and every exported Excel workbook is recalculated in OpenOffice and must match the app.
+- **298 automated tests.** Expected loan values come from the specification and from an independent plain-math version of each formula, and every exported Excel workbook is recalculated in OpenOffice and must match the app.
 
 ## What's inside
 
@@ -88,10 +88,10 @@ flowchart LR
 | Admin checklist, internet lockdown, tested backups | ✅ Done. The lockdown was tested live on 2026-10-12: the API and the database were blocked from the internet while the local chat still answered. See [admin-lockdown.md](docs/admin-lockdown.md). |
 | Debt dashboard | ✅ Done. See [debt-dashboard.md](docs/debt-dashboard.md). |
 | AI Engineering Lab | ✅ Done. See [ai-lab.md](docs/ai-lab.md). |
-| Next: viewer / analyst / credit officer roles, fund-scoped deals, access audit | Planned |
+| Roles (viewer, analyst, credit officer, admin), fund-scoped deals, access audit | ✅ Done. See [access-control.md](docs/access-control.md). |
 | Then: NOI waterfall, lease rollover, concentration, data quality | Planned |
 
-**Not claimed:** PropertyIQ isn't described as secure, compliant or production-ready. Network isolation was tested once on the development laptop (2026-10-12), not in a hardened deployment. Production sign-in (multi-factor, lockout, token revocation), role-based access and encryption at rest and in transit are still to do. See [security-boundary.md](docs/security-boundary.md).
+**Not claimed:** PropertyIQ isn't described as secure, compliant or production-ready. Network isolation was tested once on the development laptop (2026-10-12), not in a hardened deployment. Roles and fund scoping are enforced and tested on synthetic data, but production sign-in (multi-factor, lockout, token revocation) and encryption at rest and in transit are still to do. See [security-boundary.md](docs/security-boundary.md).
 
 ## Setup (Windows 11)
 
@@ -110,6 +110,7 @@ docker compose up -d
 .\.venv\Scripts\python.exe scripts\seed.py              # 55 synthetic properties and 46 loans
 .\.venv\Scripts\python.exe scripts\screening_setup.py   # loan screening module
 .\.venv\Scripts\python.exe scripts\lab_setup.py         # AI Lab request traces
+.\.venv\Scripts\python.exe scripts\access_setup.py      # roles, fund-scoped deals, access audit, test accounts
 .\.venv\Scripts\python.exe scripts\set_demo_password.py # demo sign-in password (hidden prompt)
 
 # 3. Local models (one-time download, about 2.8 GB)
@@ -141,7 +142,7 @@ cd apps\web; npx tsc --noEmit; npm run build
 .\.venv\Scripts\python.exe scripts\backup.py
 ```
 
-Demo sign-ins are `analyst` (all 55 properties) and `restricted` (Synthetic Fund II only). Passwords live only in `.env`, which is git-ignored.
+Demo sign-ins include `analyst` (all 55 properties), `restricted` (an analyst with Synthetic Fund II only), a read-only `viewer`, and credit officers `credit1` to `credit4` with different fund grants. Roles decide what each can change; see [access-control.md](docs/access-control.md). Passwords live only in `.env`, which is git-ignored.
 
 ## Pages
 

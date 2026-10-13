@@ -37,6 +37,14 @@ A local-only proof of concept on synthetic data, built for a potential enterpris
 - **Traces store no question, prompt or answer text** (owner decision). Add trace fields as IDs, counts or timings only, and extend the marker test in `tests/test_lab.py`.
 - **Writer login:** `piq_trace_writer` writes traces; setup is `scripts/lab_setup.py`.
 
+## Roles, fund scope and the access audit (Phase 0.5)
+
+- **Where it lives:** `services/api/propertyiq/access.py` (role table), `audit.py`, and the checks in `screening/tier2_routes.py` and `screening/routes.py`. Read `docs/access-control.md` first.
+- **Every new route** takes the signed-in user. Deal-related routes call `scoped(...)` (fund check, then role check); lender-policy writes call `access.require(user, "policy", ...)`. Audit successful changes with `audit.allowed`.
+- **Another fund's record answers 404**, the same as a missing one, never 403.
+- **Audit fields are IDs and labels only.** Never store passwords, tokens, notes, document contents or other typed text. Extend `test_sign_ins_are_audited_without_the_attempted_text` if you add fields.
+- **Writer login:** `piq_audit_writer` (append and prune only); setup is `scripts/access_setup.py`.
+
 ## Admin tools
 
 - **Where it lives:** `services/api/propertyiq/admin/`, `apps/web/app/admin/`, `scripts/lockdown.ps1` and `scripts/backup.py`. Read `docs/admin-lockdown.md` first.

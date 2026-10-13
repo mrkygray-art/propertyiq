@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import Help from "@/components/Help";
 import Shell from "@/components/Shell";
-import { ApiError } from "@/lib/api";
+import { ApiError, can, getUser } from "@/lib/api";
 import { settingsApi, type Benchmark, type LifeRow, type Rule, type Setting } from "@/lib/workspace";
 
 const TABS = [["benchmarks", "Expense benchmarks"], ["rules", "California rules"], ["life", "Component life"], ["other", "Other settings"]] as const;
@@ -151,6 +151,7 @@ function Settings() {
       <div className="breadcrumb"><Link href="/screening/deals">← Deal workspace</Link></div>
       <div className="page-head"><div><h1>Screening settings</h1>
         <div className="sub">Reference data behind the flags. Every value shows its source and review date; examples stay labeled until you replace them.</div></div></div>
+      {!can(getUser(), "policy") && <p className="access-note" style={{ marginBottom: 12 }}>These are lender policy settings. You can read them; a credit officer or admin can change them.</p>}
       <nav className="steps" aria-label="Settings sections">
         {TABS.map(([k, label]) => <button key={k} className={`step${tab === k ? " active" : ""}`} onClick={() => setTab(k)}>{label}</button>)}
       </nav>

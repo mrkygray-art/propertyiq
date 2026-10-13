@@ -43,14 +43,14 @@ def client():
 
 @pytest.fixture(scope="module")
 def h(client):
-    r = client.post("/api/auth/login", json={"username": "analyst", "password": os.environ["PIQ_DEMO_PASSWORD"]})
+    r = client.post("/api/auth/login", json={"username": "credit1", "password": os.environ["PIQ_CREDIT_PASSWORD"]})
     return {"Authorization": f"Bearer {r.json()['token']}"}
 
 
 @pytest.fixture
 def deal(client, h, monkeypatch):
     monkeypatch.setattr(main, "PROVIDER", FakeAI())
-    r = client.post("/api/screening/deals", headers=h, json={
+    r = client.post("/api/screening/deals", headers=h, json={"fund_id": "FUND-I", 
         "name": "pytest Juniper Court", "property_facts": {**F.DEAL_FACTS, "property_type": "multifamily"},
         "borrower_inputs": {"property_type": "multifamily", "units": 20}})
     assert r.status_code == 200, r.text

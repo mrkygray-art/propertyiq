@@ -50,13 +50,32 @@ def _dec(v) -> Decimal | None:
 
 # ---------------------------------------------------------------- deals
 
-def list_deals() -> list[dict]:
+def list_deals(funds: list[str] | tuple[str, ...]) -> list[dict]:
+    """Deals in the given funds only (the caller passes the user's fund grants)."""
     with db.connection() as conn:
         return conn.execute(
-            "SELECT d.deal_id, d.name, d.updated_at, d.property_facts, "
+            "SELECT d.deal_id, d.name, d.fund_id, d.updated_at, d.property_facts, "
             "(SELECT count(*) FROM screening_documents x WHERE x.deal_id = d.deal_id) AS documents, "
             "(SELECT count(*) FROM screening_flags f WHERE f.deal_id = d.deal_id AND f.status = 'open') AS open_flags "
-            "FROM screening_deals d ORDER BY d.updated_at DESC").fetchall()
+            "FROM screening_deals d WHERE d.fund_id = ANY(%s) ORDER BY d.updated_at DESC", (list(funds),)).fetchall()
+
+
+# Which deal (and fund) a record belongs to, for the access check before anything else runs.
+_OWNER_SQL = {
+    "deal": "SELECT d.deal_id, d.fund_id, NULL AS status FROM screening_deals d WHERE d.deal_id = %s",
+    "document": "SELECT d.deal_id, d.fund_id, NULL AS status FROM screening_documents x "
+                "JOIN screening_deals d ON d.deal_id = x.deal_id WHERE x.document_id = %s",
+    "flag": "SELECT d.deal_id, d.fund_id, f.status FROM screening_flags f "
+            "JOIN screening_deals d ON d.deal_id = f.deal_id WHERE f.flag_id = %s",
+    "adjustment": "SELECT d.deal_id, d.fund_id, a.status FROM screening_adjustments a "
+                  "JOIN screening_deals d ON d.deal_id = a.deal_id WHERE a.adjustment_id = %s",
+}
+
+
+def owner(kind: str, record_id: int) -> dict | None:
+    """{deal_id, fund_id, status} for a deal, document, flag or adjustment, or None if it doesn't exist."""
+    with db.connection() as conn:
+        return conn.execute(_OWNER_SQL[kind], (record_id,)).fetchone()
 
 
 def get_deal(deal_id: int) -> dict:
@@ -72,12 +91,13 @@ def get_deal(deal_id: int) -> dict:
 
 
 def create_deal(name: str, username: str, property_facts: dict, borrower_inputs: dict,
-                guideline_set_id: int | None) -> int:
+                guideline_set_id: int | None, fund_id: str) -> int:
     with _writer() as conn:
         return conn.execute(
-            "INSERT INTO screening_deals (name, created_by, property_facts, borrower_inputs, guideline_set_id) "
-            "VALUES (%s, %s, %s, %s, %s) RETURNING deal_id",
-            (name, username, dumps(property_facts), dumps(borrower_inputs), guideline_set_id)).fetchone()["deal_id"]
+            "INSERT INTO screening_deals (name, created_by, property_facts, borrower_inputs, guideline_set_id, fund_id) "
+            "VALUES (%s, %s, %s, %s, %s, %s) RETURNING deal_id",
+            (name, username, dumps(property_facts), dumps(borrower_inputs), guideline_set_id,
+             fund_id)).fetchone()["deal_id"]
 
 
 def update_deal(deal_id: int, **fields) -> None:

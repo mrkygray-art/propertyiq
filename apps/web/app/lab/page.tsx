@@ -328,7 +328,7 @@ function SchemaTab() {
           <tbody>{data.roles.map((r) => (
             <tr key={r.rolname}><td><code>{r.rolname}</code></td><td className="num">{r.can_read}</td><td className="num">{r.can_write}</td>
               <td style={{ fontSize: 13 }}>{{ piq_readonly: "The API, for every read", piq_owner: "Migrations and seeding only",
-                piq_screening_writer: "Loan screening saves", piq_trace_writer: "Writing request traces" }[r.rolname] ?? "—"}</td></tr>))}</tbody></table>
+                piq_screening_writer: "Loan screening saves", piq_trace_writer: "Writing request traces", piq_audit_writer: "Writing the access audit" }[r.rolname] ?? "—"}</td></tr>))}</tbody></table>
       </section>
     </div>
   );

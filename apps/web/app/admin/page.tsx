@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Shell from "@/components/Shell";
-import { api, ApiError, type Checklist, type CheckStatus, type FirewallStatus, type LockdownMode, type User } from "@/lib/api";
+import {
+  api, ApiError, ROLE_LABEL, type AuditLog, type Checklist, type CheckStatus, type FirewallStatus, type LockdownMode, type User,
+} from "@/lib/api";
 
 const STATUS: Record<CheckStatus, { label: string; icon: string; cls: string }> = {
   pass: { label: "Pass", icon: "✓", cls: "ok" },
@@ -170,8 +172,64 @@ function Admin({ user }: { user: User }) {
             </div>
           ))}
         </section>
+
+        <AccessAudit />
       </div>
     </>
+  );
+}
+
+const REASON: Record<string, string> = { role: "role doesn't allow it", fund: "fund not granted", sign_in: "wrong name or password" };
+
+function AccessAudit() {
+  const [log, setLog] = useState<AuditLog | null>(null);
+  const [only, setOnly] = useState<"refused" | undefined>(undefined);
+  const [error, setError] = useState<string | null>(null);
+  const load = useCallback(() => {
+    api.audit(only).then(setLog).catch((e) => setError(e instanceof ApiError ? e.message : "The API is unreachable."));
+  }, [only]);
+  useEffect(() => { load(); }, [load]);
+
+  return (
+    <section className="card" aria-labelledby="audit-h">
+      <div className="card-head">
+        <h2 id="audit-h">Access audit</h2>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          {log && <span className="chip neutral">{log.total} events · {log.refused} refused · {log.failed_sign_ins} failed sign-ins</span>}
+          <button className={`btn ${only ? "" : "secondary"}`} onClick={() => setOnly(only ? undefined : "refused")}>
+            {only ? "Show everything" : "Refused only"}</button>
+          <button className="btn secondary" onClick={load}>Refresh</button>
+        </div>
+      </div>
+      <p className="hint" style={{ marginTop: 0 }}>
+        Sign-ins, refusals, changes, exports and admin actions, newest first. No passwords, document contents or notes
+        are stored. Kept {log?.retention_days ?? 90} days. A refusal for another fund&apos;s record looks to that user
+        like the record doesn&apos;t exist.
+      </p>
+      {error && <div className="error" role="alert">{error}</div>}
+      {!log && !error && <div className="empty">Loading…</div>}
+      {log && log.events.length === 0 && <div className="empty">No events yet.</div>}
+      {log && log.events.length > 0 && (
+        <div className="table-wrap" style={{ maxHeight: 520, overflowY: "auto" }}>
+          <table>
+            <thead><tr><th>When</th><th>User</th><th>Action</th><th>Result</th><th>Record</th><th>Fund</th></tr></thead>
+            <tbody>
+              {log.events.map((e) => (
+                <tr key={e.event_id}>
+                  <td style={{ whiteSpace: "nowrap" }}>{new Date(e.created_at).toLocaleString()}</td>
+                  <td>{e.username}{e.role && <span className="muted"> ({ROLE_LABEL[e.role] ?? e.role})</span>}</td>
+                  <td className="mono">{e.action}</td>
+                  <td>{e.outcome === "allowed" ? <span className="chip ok">✓ Allowed</span>
+                    : <span className="chip rule">✕ Refused: {REASON[e.reason ?? ""] ?? e.reason}</span>}</td>
+                  <td>{e.target_type ? `${e.target_type}${e.target_id ? ` ${e.target_id}` : ""}` : "—"}</td>
+                  <td>{e.fund_id ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }
 

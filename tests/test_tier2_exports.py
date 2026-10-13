@@ -51,9 +51,9 @@ class FakeAI:
 def setup():
     main.PROVIDER, saved = FakeAI(), main.PROVIDER
     with TestClient(main.app) as client:
-        r = client.post("/api/auth/login", json={"username": "analyst", "password": os.environ["PIQ_DEMO_PASSWORD"]})
+        r = client.post("/api/auth/login", json={"username": "credit1", "password": os.environ["PIQ_CREDIT_PASSWORD"]})
         h = {"Authorization": f"Bearer {r.json()['token']}"}
-        did = client.post("/api/screening/deals", headers=h, json={
+        did = client.post("/api/screening/deals", headers=h, json={"fund_id": "FUND-I", 
             "name": "pytest exports", "property_facts": {**F.DEAL_FACTS, "property_type": "multifamily"},
             "borrower_inputs": {"property_type": "multifamily"}}).json()["deal_id"]
         try:

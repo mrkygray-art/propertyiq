@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { api, getUser, signOut, type Health, type LockdownMode, type User } from "@/lib/api";
+import { api, getUser, ROLE_LABEL, signOut, type Health, type LockdownMode, type User } from "@/lib/api";
 import ScreeningNavLink from "./ScreeningNavLink";
 
 function Indicator({ ok, label }: { ok: boolean | null; label: string }) {
@@ -63,6 +63,7 @@ export default function Shell({ children }: { children: (user: User) => React.Re
         <div className="user">
           {user.role === "admin" && <Link href="/admin">Admin</Link>}
           <span>{user.display_name}</span>
+          <span className="role-chip" title={`Fund access: ${user.portfolios.join(", ")}`}>{ROLE_LABEL[user.role] ?? user.role}</span>
           <button className="linkbtn" onClick={() => { signOut(); router.replace("/login"); }}>Sign out</button>
         </div>
       </header>

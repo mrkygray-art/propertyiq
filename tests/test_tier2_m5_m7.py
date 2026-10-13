@@ -174,13 +174,13 @@ def client():
 
 @pytest.fixture(scope="module")
 def h(client):
-    r = client.post("/api/auth/login", json={"username": "analyst", "password": os.environ["PIQ_DEMO_PASSWORD"]})
+    r = client.post("/api/auth/login", json={"username": "credit1", "password": os.environ["PIQ_CREDIT_PASSWORD"]})
     return {"Authorization": f"Bearer {r.json()['token']}"}
 
 
 @pytest.fixture
 def deal(client, h):
-    d = client.post("/api/screening/deals", headers=h, json={
+    d = client.post("/api/screening/deals", headers=h, json={"fund_id": "FUND-I", 
         "name": "pytest M5-M7", "property_facts": {**PROBLEM_FACTS}, "borrower_inputs": {"property_type": "multifamily"}}).json()
     for name in ("problem_rent_roll.xlsx", "problem_t12.xlsx"):
         doc = client.post(f"/api/screening/deals/{d['deal_id']}/documents", headers=h,

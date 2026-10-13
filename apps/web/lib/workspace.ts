@@ -23,11 +23,11 @@ export interface Item {
 export interface Doc extends DocumentSummary { deal_id: number; items: Item[] }
 
 export interface Deal {
-  deal_id: number; name: string; guideline_set_id: number | null; created_by: string; updated_at: string;
+  deal_id: number; name: string; fund_id: string; guideline_set_id: number | null; created_by: string; updated_at: string;
   property_facts: Record<string, unknown>; borrower_inputs: Record<string, unknown>; documents: DocumentSummary[];
 }
 
-export interface DealRow { deal_id: number; name: string; updated_at: string; documents: number; open_flags: number; property_facts: Record<string, unknown> }
+export interface DealRow { deal_id: number; name: string; fund_id: string; updated_at: string; documents: number; open_flags: number; property_facts: Record<string, unknown> }
 
 export interface Flag {
   flag_id: number; rule_id: string; fingerprint: string; severity: Severity; title: string; explanation: string;
@@ -79,7 +79,7 @@ export const ws = {
   categories: () => call<Category[]>("/api/screening/categories"),
   deals: () => call<DealRow[]>("/api/screening/deals"),
   deal: (id: number) => call<Deal>(`/api/screening/deals/${id}`),
-  createDeal: (body: { name: string; property_facts: Record<string, unknown>; borrower_inputs: Record<string, unknown> }) =>
+  createDeal: (body: { name: string; fund_id?: string; property_facts: Record<string, unknown>; borrower_inputs: Record<string, unknown> }) =>
     call<Deal>("/api/screening/deals", { method: "POST", body: JSON.stringify(body) }),
   patchDeal: (id: number, body: Partial<Pick<Deal, "name" | "property_facts" | "borrower_inputs" | "guideline_set_id">>) =>
     call<Deal>(`/api/screening/deals/${id}`, { method: "PATCH", body: JSON.stringify(body) }),

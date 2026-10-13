@@ -61,6 +61,9 @@ Synthetic data: 55 properties (14 office, 14 retail, 14 industrial, 13 multifami
 | `postgres` | Superuser | `scripts/db_bootstrap.py` only |
 | `piq_owner` | Owns schema `piq` | `scripts/migrate.py`, `scripts/seed.py` |
 | `piq_readonly` | `SELECT` on `piq` tables; read-only transactions; 5-second statement timeout | The API |
+| `piq_screening_writer` | Changes `screening_*` tables only | Loan screening saves |
+| `piq_trace_writer` | Adds and prunes `request_traces` only | AI request traces |
+| `piq_audit_writer` | Adds and prunes `access_audit` only; can't edit rows | Access audit ([access-control.md](access-control.md)) |
 
 `CREATE` on `public` is revoked from everyone, and the database refuses connections from roles that weren't granted access.
 
