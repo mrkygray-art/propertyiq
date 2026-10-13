@@ -79,7 +79,7 @@ Configuring the application to stay local doesn't prove that the machine stays l
 | AnyViewer (remote access software on this machine) | Its relay servers | Quit it during the offline demo, or document it as out of scope |
 | Windows itself | Updates, Defender, telemetry | Out of scope; record it in the demo notes |
 
-**Lockdown (built):** the Admin page's internet lockdown adds outbound block rules for PropertyIQ's programs, or for the whole computer, and saves before/after connection evidence. The live checklist tests real connections from the API and from the database container. McAfee is registered as this PC's firewall and may override Windows Firewall, so the blocking has to be proven by those tests. See [admin-lockdown.md](admin-lockdown.md).
+**Lockdown (built and tested 2026-10-12):** the Admin page's internet lockdown adds outbound block rules for PropertyIQ's programs, or for the whole computer, and saves before/after connection evidence. The live checklist tests real connections from the API and from the database container. McAfee is registered as this PC's firewall, so the blocking had to be proven by those tests. On 2026-10-12 both connections were blocked in `App` mode while the local chat still answered, and `Computer` mode blocked the whole PC. See [admin-lockdown.md](admin-lockdown.md#live-test-2026-10-12) for the evidence and what the test didn't cover.
 
 ## Prompt injection (Milestone 2)
 
@@ -98,4 +98,4 @@ Configuring the application to stay local doesn't prove that the machine stays l
 - **No audit log yet.** Structured audit events are planned for Milestone 3.
 - **Superuser password on disk.** `POSTGRES_PASSWORD` sits in `.env` on disk. That's acceptable for a demo; production would use a secrets manager.
 - **Local admin is trusted.** Anyone with admin rights on this PC can read everything.
-- **Lockdown depends on the active firewall.** If McAfee overrides Windows Firewall, the lockdown rules have no effect; the checklist's connection tests detect this.
+- **Lockdown depends on the active firewall.** The rules worked with McAfee installed on 2026-10-12, but a McAfee update or settings change could override Windows Firewall. The checklist's connection tests detect this every time the Admin page loads.

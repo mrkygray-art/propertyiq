@@ -85,13 +85,13 @@ flowchart LR
 | 1b: Next.js UI and local AI chat, with checked figures | ✅ Done |
 | Tier 1: Loan screening (guidelines, stress tests, PDF and Excel export) | ✅ Done. See [loan-screening.md](docs/loan-screening.md). |
 | Tier 2: Document intake, anomaly flags, market comps, California red flags, underwriting comparison | ✅ Done. See [document-intake.md](docs/document-intake.md). |
-| Admin checklist, internet lockdown, tested backups | ✅ Built. The lockdown hasn't been run live yet. See [admin-lockdown.md](docs/admin-lockdown.md). |
+| Admin checklist, internet lockdown, tested backups | ✅ Done. The lockdown was tested live on 2026-10-12: the API and the database were blocked from the internet while the local chat still answered. See [admin-lockdown.md](docs/admin-lockdown.md). |
 | Debt dashboard | ✅ Done. See [debt-dashboard.md](docs/debt-dashboard.md). |
 | AI Engineering Lab | ✅ Done. See [ai-lab.md](docs/ai-lab.md). |
 | Next: viewer / analyst / credit officer roles, fund-scoped deals, access audit | Planned |
 | Then: NOI waterfall, lease rollover, concentration, data quality | Planned |
 
-**Not claimed:** PropertyIQ isn't described as secure, compliant or production-ready. Network isolation still has to be tested and recorded, and production sign-in (multi-factor, lockout, token revocation), role-based access and encryption at rest and in transit are still to do. See [security-boundary.md](docs/security-boundary.md).
+**Not claimed:** PropertyIQ isn't described as secure, compliant or production-ready. Network isolation was tested once on the development laptop (2026-10-12), not in a hardened deployment. Production sign-in (multi-factor, lockout, token revocation), role-based access and encryption at rest and in transit are still to do. See [security-boundary.md](docs/security-boundary.md).
 
 ## Setup (Windows 11)
 

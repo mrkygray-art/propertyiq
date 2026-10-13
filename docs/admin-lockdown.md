@@ -40,9 +40,23 @@ The `admin` sign-in opens the **Admin** page (`/admin`). It has two parts: an in
 
 If lockdown is on and either connects, the item **fails** with "the block is not working".
 
-### Not yet verified
+### Live test (2026-10-12)
 
-The first live test of `App` mode was started on 2026-10-11, but the Windows permission prompt was cancelled, so the firewall wasn't changed. Until someone runs it from the Admin page, it's unproven whether the rules take effect with McAfee installed. The checklist's two connection tests will show the result immediately.
+Ky ran each mode from the Admin page on this PC, with Wi-Fi on and McAfee still registered as the active firewall. Windows Firewall rules took effect.
+
+| Mode | Time | Evidence |
+|---|---|---|
+| `App` | 17:06 and 17:10 | 7 rules added. Checklist: the API's Python and the database container both got **blocked** connecting to 1.1.1.1:443. PowerShell, which isn't blocked in this mode, still connected, so the rest of the PC kept working. A chat question was answered by the local model with every figure verified (14.6 s). |
+| `Computer` | 17:07 | 8 rules plus the Hyper-V (WSL/Docker) outbound block. The PowerShell test connection changed from connected to **blocked**. Checklist: 34 pass, 2 warnings, 0 fail. |
+| `Off` | 17:09 | All rules removed and the firewall defaults restored. The test connection went back to connected. |
+
+The evidence files are `logs/lockdown-evidence-20261012-*.json` and `logs/lockdown.log`, kept on this PC only.
+
+**Not covered by this test:**
+- No separate connection probe for Ollama or Node.js. Their rules were added, but only the API and the database container were probed.
+- The Windows Firewall log (`pfirewall.log`) wasn't captured.
+- No chat question was asked during `Computer` mode.
+- It was one run, on one PC.
 
 ## Security checklist
 
